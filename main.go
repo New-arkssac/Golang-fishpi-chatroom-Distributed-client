@@ -29,16 +29,29 @@ func init() {
 
 func process(conn net.Conn) {
 	go webSocketClient(conn)
+	defer conn.Close()
 	var apiKey string
-	for apiKey == "" {
-		apiKey = getUserNameAndPassword(conn)
-		if apiKey != "" {
-			log.Println(conn.RemoteAddr().String(), "loging SUCCESS")
-			break
+	for {
+		var buf [1024]byte
+		read := bufio.NewReader(conn)
+		n, err := read.Read(buf[:])
+		if err != nil || n == 0 {
+			out := conn.RemoteAddr().String()
+			log.Println(out, " Login out")
+			return
 		}
-		getMessage("apiKey nil, Please checking your username or password\n", conn)
+		recv := strings.Split(string(buf[:n]), "\n")[0]
+		switch {
+		case strings.HasPrefix(recv, "{") && strings.HasSuffix(recv, "}") && strings.Contains(recv, "&&"):
+			apiKey = verify(recv, conn)
+			continue
+		case apiKey != "":
+			go sendClientMessage(recv, apiKey)
+			log.Println(conn.RemoteAddr().String(), recv)
+		default:
+			getMessage("apiKey nil, Please checking your nameOrEmail or userPassword\n", conn)
+		}
 	}
-	getClient(conn, apiKey)
 }
 
 func webSocketClient(connect net.Conn) {
@@ -64,57 +77,21 @@ func webSocketClient(connect net.Conn) {
 	}
 }
 
-func getUserNameAndPassword(conn net.Conn) string {
-	for {
-		var buf [1024]byte
-		read := bufio.NewReader(conn)
-		n, err := read.Read(buf[:])
-		if err != nil {
-			out := conn.RemoteAddr().String()
-			log.Println(out, " Login out1", err)
-		}
-		recv := strings.Split(string(buf[:n]), "\n")[0]
-		if strings.HasPrefix(recv, "{") && strings.HasSuffix(recv, "}") && strings.Contains(recv, "&&") {
-			apiKey := verify(recv)
-			return apiKey
-		}
-		_ = recv
-	}
-}
-
-func getClient(conn net.Conn, apik string) {
-	defer conn.Close()
-	for {
-		var buf [1024]byte
-		read := bufio.NewReader(conn)
-		n, err := read.Read(buf[:])
-		if err != nil || n == 0 {
-			out := conn.RemoteAddr().String()
-			log.Println(out, " Login out")
-			return
-		}
-		recv := strings.Split(string(buf[:n]), "\n")[0]
-		go sendClientMessage(recv, apik)
-		log.Println(conn.RemoteAddr().String(), recv)
-	}
-}
-
 func getMessage(message string, conn net.Conn) {
-	// defer conn.Close()
 	conn.Write([]byte(message))
 }
 
-func verify(recv string) string {
+func verify(recv string, conn net.Conn) string {
 	content := strings.TrimPrefix(recv, "{")
 	content = strings.TrimSuffix(content, "}")
 	arr := strings.Split(content, "&&")
 	userName, passwd := arr[0], arr[len(arr)-1]
-	apiKey := getApiKey(userName, passwd)
+	apiKey := getApiKey(userName, passwd, conn)
 	_ = recv
 	return apiKey
 }
 
-func getApiKey(userName string, passwd string) string {
+func getApiKey(userName string, passwd string, conn net.Conn) string {
 	passwd = md5Hash(passwd)
 	requestBody := fmt.Sprintf(`{"nameOrEmail": "%s", "userPassword": "%s"}`, userName, passwd)
 	response, err := http.Post("https://fishpi.cn/api/getKey", "application/json", bytes.NewReader([]byte(requestBody)))
@@ -123,13 +100,17 @@ func getApiKey(userName string, passwd string) string {
 	}
 	defer response.Body.Close()
 	apiKey, _ := ioutil.ReadAll(response.Body)
-	m := make(map[string]string)
+	m := make(map[string]interface{})
 	json.Unmarshal(apiKey, &m)
-	if m["code"] == "-1" {
-		log.Println(m["msg"])
+	if m["code"].(float64) == -1 {
+		msg := fmt.Sprintf("Login Message:%s\n", m["msg"].(string))
+		getMessage(msg, conn)
+		return m["msg"].(string)
+	} else {
+		msg := fmt.Sprintf("Login Message:%s\n", m["Key"].(string))
+		getMessage(msg, conn)
+		return m["Key"].(string)
 	}
-
-	return m["Key"]
 
 }
 
