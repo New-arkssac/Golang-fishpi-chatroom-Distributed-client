@@ -70,7 +70,7 @@ func webSocketClient(connect net.Conn) {
 		m := make(map[string]string)
 		json.Unmarshal(messageData, &m)
 		userName, userNickName, userTime, userMsg := m["userName"], m["userNickname"], m["time"], m["md"]
-		if userName != "" && userNickName != "" && userTime != "" && userMsg != "" {
+		if userName != "" && userMsg != "" {
 			message := fmt.Sprintf("\n[%s]%s(%s):\n%s\n", userTime, userNickName, userName, userMsg)
 			getMessage(message, connect)
 		}
