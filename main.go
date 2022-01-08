@@ -18,29 +18,30 @@ import (
 )
 
 var (
-	host   string
-	port   string
-	apiKey string
+	host string
+	port string
 )
 
 func init() {
 	flag.StringVar(&host, "l", "0.0.0.0", "主机地址，默认0.0.0.0")
 	flag.StringVar(&port, "p", "33333", "主机端口，默认33333")
-	flag.StringVar(&apiKey, "k", "", "apiKey，默认未空")
 }
 
 func process(conn net.Conn) {
-	var api = make(chan string)
-	go getWebSocketMessage(conn)
-	if apiKey == "" {
-		go getUserNameAndPassword(conn, api)
-		apiKey = <-api
+	go webSocketClient(conn)
+	var apiKey string
+	for apiKey == "" {
+		apiKey = getUserNameAndPassword(conn)
+		if apiKey != "" {
+			log.Println(conn.RemoteAddr().String(), "loging SUCCESS")
+			break
+		}
+		getMessage("apiKey nil, Please checking your username or password\n", conn)
 	}
-	log.Println(conn.RemoteAddr().String(), "loging SUCCESS")
-	go getClient(conn, apiKey)
+	getClient(conn, apiKey)
 }
 
-func webSocketClient(msg chan string) {
+func webSocketClient(connect net.Conn) {
 	client := websocket.Dialer{}
 	conn, _, err := client.Dial("wss://fishpi.cn/chat-room-channel", nil)
 	if err != nil {
@@ -58,34 +59,31 @@ func webSocketClient(msg chan string) {
 		userName, userNickName, userTime, userMsg := m["userName"], m["userNickname"], m["time"], m["md"]
 		if userName != "" && userNickName != "" && userTime != "" && userMsg != "" {
 			message := fmt.Sprintf("\n[%s]%s(%s):\n%s\n", userTime, userNickName, userName, userMsg)
-			msg <- message
+			getMessage(message, connect)
 		}
 	}
 }
 
-func getUserNameAndPassword(conn net.Conn, api chan string) {
-	var key = make(chan string, 2)
+func getUserNameAndPassword(conn net.Conn) string {
 	for {
 		var buf [1024]byte
 		read := bufio.NewReader(conn)
 		n, err := read.Read(buf[:])
-		if err != nil || n == 0 {
+		if err != nil {
 			out := conn.RemoteAddr().String()
-			log.Println(out, " Login out")
-			return
+			log.Println(out, " Login out1", err)
 		}
 		recv := strings.Split(string(buf[:n]), "\n")[0]
 		if strings.HasPrefix(recv, "{") && strings.HasSuffix(recv, "}") && strings.Contains(recv, "&&") {
-			go verify(key, recv)
-			apiKey := <-key
-			api <- apiKey
-			close(api)
-			return
+			apiKey := verify(recv)
+			return apiKey
 		}
+		_ = recv
 	}
 }
 
 func getClient(conn net.Conn, apik string) {
+	defer conn.Close()
 	for {
 		var buf [1024]byte
 		read := bufio.NewReader(conn)
@@ -101,32 +99,23 @@ func getClient(conn net.Conn, apik string) {
 	}
 }
 
-func getWebSocketMessage(conn net.Conn) {
-	var msg = make(chan string, 1)
-	go webSocketClient(msg)
-	defer conn.Close()
-	for {
-		message := <-msg
-		conn.Write([]byte(message))
-	}
+func getMessage(message string, conn net.Conn) {
+	// defer conn.Close()
+	conn.Write([]byte(message))
 }
 
-func verify(key chan string, recv string) {
-	var api = make(chan string, 1)
+func verify(recv string) string {
 	content := strings.TrimPrefix(recv, "{")
 	content = strings.TrimSuffix(content, "}")
 	arr := strings.Split(content, "&&")
 	userName, passwd := arr[0], arr[len(arr)-1]
-	go getApiKey(api, userName, passwd)
-	apiKey := <-api
-	key <- apiKey
+	apiKey := getApiKey(userName, passwd)
 	_ = recv
+	return apiKey
 }
 
-func getApiKey(api chan string, userName string, passwd string) {
-	hash := make(chan string, 1)
-	go md5Hash(hash, passwd)
-	passwd = <-hash
+func getApiKey(userName string, passwd string) string {
+	passwd = md5Hash(passwd)
 	requestBody := fmt.Sprintf(`{"nameOrEmail": "%s", "userPassword": "%s"}`, userName, passwd)
 	response, err := http.Post("https://fishpi.cn/api/getKey", "application/json", bytes.NewReader([]byte(requestBody)))
 	if err != nil {
@@ -138,17 +127,18 @@ func getApiKey(api chan string, userName string, passwd string) {
 	json.Unmarshal(apiKey, &m)
 	if m["code"] == "-1" {
 		log.Println(m["msg"])
-		return
 	}
 
-	api <- m["Key"]
+	return m["Key"]
 
 }
-func md5Hash(hash chan string, sum string) {
+
+func md5Hash(sum string) string {
 	b := []byte(sum)
 	m := md5.New()
 	m.Write(b)
-	hash <- hex.EncodeToString(m.Sum(nil))
+	hash := hex.EncodeToString(m.Sum(nil))
+	return hash
 }
 
 func sendClientMessage(msg string, apiKey string) {
