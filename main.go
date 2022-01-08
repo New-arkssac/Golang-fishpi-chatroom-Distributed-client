@@ -49,7 +49,7 @@ func process(conn net.Conn) {
 			go sendClientMessage(recv, apiKey)
 			log.Println(conn.RemoteAddr().String(), recv)
 		default:
-			getMessage("apiKey nil, Please checking your nameOrEmail or userPassword\n", conn)
+			getMessage("apiKey nil, Please send your nameOrEmail and userPassword\n", conn)
 		}
 	}
 }
