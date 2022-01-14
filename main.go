@@ -22,7 +22,6 @@ var ( // 程序参数设置
 	host   string
 	port   string
 	client = &http.Client{}
-	num    int
 )
 
 type info struct { //登录用户信息结构体
@@ -266,18 +265,17 @@ func redHeartBeat(heart *heartBeat, more *chatMore, statTime int, oId string, co
 	rush := 1 / (float64(heart.Count) - float64(heart.Got))
 	for i := 0; i < heart.Got; i++ {
 		if heart.Who[i].UserMoney > 0 {
-			message := fmt.Sprintf("\n红包机器人: 已经被领了%d积分?超!这个红包不对劲!!快跑!!\n", heart.Who[num].UserMoney) //检查红包是否已经被人领取
+			message := fmt.Sprintf("\n红包机器人: 已经被领了%d积分?超!这个红包不对劲!!快跑!!\n", heart.Who[i].UserMoney) //检查红包是否已经被人领取
 			connectMessage(message, conn)
 			return
 		}
 	}
-	if rush > 0.5 || time.Now().Second()-statTime > 2 { // 递归两秒后退出
+	if rush > 0.5 || time.Now().Second()-statTime > 1 || heart.Count-heart.Got == 1 { // 递归两秒后退出
 		connectMessage("\n红包机器人: 时间到了!!我忍不住了!!我冲了!!\n", conn)
 		go redRandomOrAverageOrMe(oId, conn)
 		return
-	} else if heart.Who[heart.Got-1].UserMoney <= 0 {
+	} else {
 		message := fmt.Sprintf("\n红包机器人: 稳住!!别急!!再等等!!成功率已经有%.2f%%了\n", rush*100)
-		num++
 		connectMessage(message, conn)
 	}
 	moreContent(statTime, oId, conn)
