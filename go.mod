@@ -1,4 +1,4 @@
-module test
+module bulabula
 
 go 1.17
 

@@ -18,16 +18,12 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var ( // 程序参数设置
-	host   string
-	port   string
-	client = &http.Client{}
-)
-
 type info struct { //登录用户信息结构体
-	ApiKey         string
-	ConnectName    string
-	RedRobotStatus bool
+	ApiKey, ConnectName string
+	RedRobotStatus      bool
+	RedStatus           struct {
+		Find, GetPoint, OutPoint int
+	}
 }
 
 type chatRoom struct {
@@ -37,7 +33,7 @@ type chatRoom struct {
 	UserMsg      string `json:"md"`
 	Time         string `json:"time"`
 	Oid          string `json:"oId"`
-	Type         string `json:"type"`
+	Type         string `json:"type"` // 聊天室信息结构体
 }
 
 type redInfo struct {
@@ -46,7 +42,7 @@ type redInfo struct {
 	Count    int    `json:"count"`
 	Got      int    `json:"got"`
 	Type     string `json:"type"`
-	Recivers string `json:"recivers"`
+	Recivers string `json:"recivers"` // 红包数据结构体
 }
 
 type redOpenContent struct {
@@ -59,7 +55,7 @@ type redOpenContent struct {
 type chatMore struct {
 	Data []struct {
 		Content string `json:"content"`
-	} `json:"data"`
+	} `json:"data"` // 领取信息结构体
 }
 
 type heartBeat struct {
@@ -69,23 +65,21 @@ type heartBeat struct {
 	Time    string `json:"time"`
 	Who     []struct {
 		UserMoney int `json:"userMoney"`
-	} `json:"who"`
+	} `json:"who"` // 领取信息列表结构体
 }
 
-var status = make(map[string]info) // 缓存登录用户信息
-
-var login string = `
-##############################################
-#请先登录: {your-nameOrEmail&&your-password}  #
-##############################################
+var ( // 程序参数设置
+	host   string
+	port   string
+	client        = &http.Client{}
+	status        = make(map[string]*info) // 缓存登录用户信息
+	header        = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.71 Safari/537.36"
+	login  string = "\n#请先登录: {your-nameOrEmail&&your-password}#\n"
+	help   string = `
+>   -robot 开启红包机器人
+>   -redinfo 查看红包信息
 `
-
-var help string = `
-################################################
-	{#redRobot} 开启红包机器人
-################################################
-`
-var header = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.71 Safari/537.36"
+)
 
 func init() {
 	flag.StringVar(&host, "l", "0.0.0.0", "主机地址，默认0.0.0.0")
@@ -93,8 +87,17 @@ func init() {
 }
 
 func process(conn net.Conn) {
-	var apiKey string
-	var connectUserName string
+	status[conn.RemoteAddr().String()] = &info{ // 初始化连接用户信息
+		ApiKey:         "",
+		ConnectName:    "",
+		RedRobotStatus: false,
+		RedStatus: struct {
+			Find     int
+			GetPoint int
+			OutPoint int
+		}{Find: 0, GetPoint: 0, OutPoint: 0},
+	}
+	var m = status[conn.RemoteAddr().String()]
 	connectMessage(login, conn)
 	go webSocketClient(conn) // 开启websocket会话
 	defer conn.Close()       // 函数结束时关闭tcp连接
@@ -108,10 +111,10 @@ func process(conn net.Conn) {
 			log.Println(out, " Login out")
 			return
 		}
-
-		recv := strings.TrimSpace(string(buf[:n]))                                      // 删除接收到的换行符
-		if strings.HasPrefix(recv, "{") && len(apiKey) == 32 && connectUserName != "" { // 检查是否是命令格式
-			commandName, result := commandDealWicth(apiKey, connectUserName, recv, conn)
+		recv := strings.TrimSpace(string(buf[:n])) // 删除接收到的换行符
+		fmt.Println(recv)
+		if strings.HasPrefix(recv, "-") && len((*m).ApiKey) == 32 && (*m).ConnectName != "" { // 检查是否是命令格式
+			commandName, result := commandDealWicth(recv, conn)
 			if !result { // 检查命令
 				message := fmt.Sprintf("%s执行失败\n", commandName)
 				connectMessage(message, conn)
@@ -119,45 +122,48 @@ func process(conn net.Conn) {
 			continue
 		}
 
-		if strings.HasPrefix(recv, "{") && strings.HasSuffix(recv, "}") && strings.Contains(recv, "&&") { //检查是否是登录命令
-			content := strings.TrimPrefix(recv, "{")
-			content = strings.TrimSuffix(content, "}")
+		if strings.HasPrefix(recv, "-") && strings.Contains(recv, "&&") { //检查是否是登录命令
+			content := strings.TrimPrefix(recv, "-")
 			arr := strings.Split(content, "&&")
 			userName, passwd := arr[0], arr[len(arr)-1]
-			apiKey, connectUserName = getApiKey(userName, passwd, conn) // 获取apiKey
-			status[conn.RemoteAddr().String()] = info{                  //使用连接ip与端口作为map键，存入info结构体
-				ApiKey:         apiKey,          // 存入获取到的apiKey
-				ConnectName:    connectUserName, // 存入apiKey的用户名
-				RedRobotStatus: false,
-			}
+			(*m).ApiKey, (*m).ConnectName = getApiKey(userName, passwd, conn)
 			continue
 		}
 
-		if apiKey == "" { // 检查是否拥有apiKey
+		if (*m).ApiKey == "" { // 检查是否拥有apiKey
 			connectMessage(login, conn)
 			continue
 		}
-		r := fmt.Sprintf("%s %s %s", conn.RemoteAddr().String(), connectUserName, recv)
-		log.Println(r)                  // tcp会话输入历史记录
-		sendClientMessage(recv, apiKey) // 发送用户输入的消息
+		r := fmt.Sprintf("%s %s %s", conn.RemoteAddr().String(), (*m).ConnectName, recv)
+		log.Println(r)                       // tcp会话输入历史记录
+		sendClientMessage(recv, (*m).ApiKey) // 发送用户输入的消息
 	}
 }
 
-func commandDealWicth(apiKey string, connectUserName string, command string, conn net.Conn) (string, bool) { // 分发命令函数
-	if command == "{#redRobot}" { // 开启红包机器人
-		status[conn.RemoteAddr().String()] = info{
-			ApiKey:         apiKey,          // 存入获取到的apiKey
-			ConnectName:    connectUserName, // 存入apiKey的用户名
-			RedRobotStatus: true,
-		}
-		connectMessage("\n红包机器人已开启\n", conn)
-		return "redRbot", true
+func commandDealWicth(command string, conn net.Conn) (string, bool) { // 分发命令函数
+	var m = status[conn.RemoteAddr().String()]
+	fmt.Println(status[conn.RemoteAddr().String()], "进入前")
+	commandMap := make(map[string]string)
+	commandMap["-help"] = help
+	commandMap["-redinfo"] = fmt.Sprintf("\n红包机器人:\n用户名:%s\n共抢了%d个红包\n共获得%d积分\n被反抢%d积分\n总计收益%d\n",
+		(*m).ConnectName, (*m).RedStatus.Find, (*m).RedStatus.GetPoint, (*m).RedStatus.OutPoint, (*m).RedStatus.GetPoint-(*m).RedStatus.OutPoint)
+
+	if (*m).RedRobotStatus {
+		commandMap["-robot"] = "\n红包机器人已关闭\n"
+		(*m).RedRobotStatus = false
+		fmt.Println(status[conn.RemoteAddr().String()], "false")
+	} else {
+		commandMap["-robot"] = "\n红包机器人已开启\n"
+		(*m).RedRobotStatus = true
+		fmt.Println(status[conn.RemoteAddr().String()], "true")
 	}
-	if command == "{#help}" { // help命令
-		connectMessage(help, conn)
-		return "help", true
+
+	if commandMap[command] == "" {
+		return command, false
 	}
-	return command, false
+
+	connectMessage(commandMap[command], conn)
+	return command, true
 }
 
 func webSocketClient(connect net.Conn) {
@@ -198,7 +204,7 @@ func distribution(red *redInfo, m *chatRoom, conn net.Conn) {
 		return
 	}
 	if red.MsgType == "redPacket" && user.ApiKey != "" && user.ConnectName != "" { // 判断是否是红包信息
-		message := fmt.Sprintf("\n[%s]%s(%s):\n%s\n", m.Time, m.UserNickName, m.UserName, red.Msg)
+		message := fmt.Sprintf("\n[%s]%s(%s):\n红包(%s)\n", m.Time, m.UserNickName, m.UserName, red.Msg)
 		go connectMessage(message, conn)
 		go redPacketRobot(red.Type, red.Recivers, m.Oid, conn)
 		return
@@ -211,13 +217,15 @@ func redPacketRobot(typee string, recivers string, oId string, conn net.Conn) { 
 		connectMessage(message, conn)
 		return
 	}
-	name := status[conn.RemoteAddr().String()].ConnectName
+
+	m := status[conn.RemoteAddr().String()]
+	(*m).RedStatus.Find++
 	if typee == "heartbeat" {
 		connectMessage("\n红包机器人: 发现心跳红包冲它!!\n", conn)
 		moreContent(time.Now().Second(), oId, conn)
 		return
 	}
-	if !strings.Contains(recivers, name) && recivers == "" || recivers == "[]" {
+	if !strings.Contains(recivers, m.ConnectName) && recivers == "" || recivers == "[]" {
 		connectMessage("\n红包机器人: 发现红包!开始出击!\n", conn)
 		redRandomOrAverageOrMe(oId, conn)
 	} else {
@@ -226,7 +234,7 @@ func redPacketRobot(typee string, recivers string, oId string, conn net.Conn) { 
 	}
 
 }
-func moreContent(statTime int, oId string, conn net.Conn) {
+func moreContent(statTime int, oId string, conn net.Conn) { // 获取领取信息
 	var more chatMore
 	var heart heartBeat
 	request, err := http.NewRequest("GET", "https://fishpi.cn/chat-room/more?page=1", nil)
@@ -270,7 +278,7 @@ func redHeartBeat(heart *heartBeat, more *chatMore, statTime int, oId string, co
 			return
 		}
 	}
-	if rush > 0.5 || time.Now().Second()-statTime > 1 || heart.Count-heart.Got == 1 { // 递归两秒后退出
+	if rush > 0.5 || time.Now().Second()-statTime > 2 || heart.Count-heart.Got == 1 { // 递归两秒后退出
 		connectMessage("\n红包机器人: 时间到了!!我忍不住了!!我冲了!!\n", conn)
 		go redRandomOrAverageOrMe(oId, conn)
 		return
@@ -311,10 +319,12 @@ func redRandomOrAverageOrMe(oId string, conn net.Conn) {
 			if m.Who[i].GetMoney < 0 {
 				mony := fmt.Sprintf("\n红包机器人: 超!被反偷了%d积分!!!\n", m.Who[i].GetMoney)
 				connectMessage(mony, conn)
+				(*b).RedStatus.OutPoint += m.Who[i].GetMoney
 				return
 			}
 			mony := fmt.Sprintf("\n红包机器人: 我帮你抢到了一个%d积分的红包!!!\n", m.Who[i].GetMoney)
 			connectMessage(mony, conn)
+			(*b).RedStatus.GetPoint += m.Who[i].GetMoney
 			return
 		}
 	}
@@ -349,7 +359,7 @@ func getApiKey(userName string, passwd string, conn net.Conn) (string, string) {
 		return m["msg"].(string), userName
 	}
 	connectUserName := getUserInfo(m["Key"].(string), conn)
-	msg := fmt.Sprintf("Login Message:%s(%s)\n%s\n", connectUserName, m["Key"].(string), "输入{#help}查看命令信息\n")
+	msg := fmt.Sprintf("Login Message:%s(%s)\n%s\n", connectUserName, m["Key"].(string), "输入-help查看命令信息\n")
 	log.Printf("%s %s Loging SUCCESS", conn.RemoteAddr().String(), connectUserName)
 	connectMessage(msg, conn)
 	return m["Key"].(string), connectUserName
@@ -364,13 +374,17 @@ func getUserInfo(apiKey string, conn net.Conn) string { // 获取用户信息
 	requestBody := fmt.Sprintf("https://fishpi.cn/api/user?apiKey=%s", apiKey)
 	request, err := http.NewRequest("GET", requestBody, nil)
 	request.Header.Set("User-Agent", header)
+
 	if err != nil {
 		log.Println("get connect User Info err:", err)
 	}
+
 	response, err1 := client.Do(request)
+
 	if err1 != nil {
 		log.Println(err1)
 	}
+
 	defer response.Body.Close()
 	connectUserName, _ := ioutil.ReadAll(response.Body)
 	var m dataInfo
@@ -387,7 +401,7 @@ func md5Hash(sum string) string { // md5加密
 }
 
 func sendClientMessage(msg string, apiKey string) { // 发送客户端发送的数据
-	if strings.HasPrefix(msg, "{") && strings.HasSuffix(msg, "}") && strings.Contains(msg, "&&") {
+	if strings.HasPrefix(msg, "-") && strings.Contains(msg, "&&") {
 		return
 	}
 	requestBody := fmt.Sprintf(`{"apiKey": "%s", "content": "%s"}`, apiKey, msg)
@@ -408,15 +422,16 @@ func main() { // 主函数
 	flag.Parse()
 	localHost := fmt.Sprintf("%s:%s", host, port)
 	listen, err := net.Listen("tcp", localHost) // 建立tcp连接
+	log.Println("开始连接")
 	if err != nil {
-		fmt.Println("Listen error:", err)
+		log.Println("Listen error:", err)
 		return
 	}
 	for {
 		connent, err := listen.Accept() //等待tcp连接
 		log.Println(connent.RemoteAddr().String() + " Connect SUCCESS")
 		if err != nil {
-			fmt.Println("Accept error:", err)
+			log.Println("Accept error:", err)
 			continue
 		}
 		go process(connent) // 创建tcp会话

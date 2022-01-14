@@ -16,14 +16,16 @@ def link():
         try:
             a = sc.recv(1024)
             print(a.decode("utf-8"))
-        except KeyboardInterrupt:  # ctrl c退出
+        except Exception:  # ctrl c退出
             sc.close()
             return
 
 
 def send(sc):
     while True:
-        msg = input(">>")
+        msg = input("")
+        if msg == "{quit}":
+            break
         sc.sendall(msg.encode())
 
 
