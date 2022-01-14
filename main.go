@@ -74,7 +74,7 @@ var ( // 程序参数设置
 	client        = &http.Client{}
 	status        = make(map[string]*info) // 缓存登录用户信息
 	header        = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.71 Safari/537.36"
-	login  string = "\n#请先登录: {your-nameOrEmail&&your-password}#\n"
+	login  string = "\n#请先登录: -yourNameOrEmail&&yourPassword #\n"
 	help   string = `
 >   -robot 开启红包机器人
 >   -redinfo 查看红包信息
