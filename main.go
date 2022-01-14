@@ -142,7 +142,6 @@ func process(conn net.Conn) {
 
 func commandDealWicth(command string, conn net.Conn) (string, bool) { // 分发命令函数
 	var m = status[conn.RemoteAddr().String()]
-	fmt.Println(status[conn.RemoteAddr().String()], "进入前")
 	commandMap := make(map[string]string)
 	commandMap["-help"] = help
 	commandMap["-redinfo"] = fmt.Sprintf("\n红包机器人:\n用户名:%s\n共抢了%d个红包\n共获得%d积分\n被反抢%d积分\n总计收益%d\n",
@@ -151,11 +150,9 @@ func commandDealWicth(command string, conn net.Conn) (string, bool) { // 分发�
 	if (*m).RedRobotStatus {
 		commandMap["-robot"] = "\n红包机器人已关闭\n"
 		(*m).RedRobotStatus = false
-		fmt.Println(status[conn.RemoteAddr().String()], "false")
 	} else {
 		commandMap["-robot"] = "\n红包机器人已开启\n"
 		(*m).RedRobotStatus = true
-		fmt.Println(status[conn.RemoteAddr().String()], "true")
 	}
 
 	if commandMap[command] == "" {
