@@ -107,13 +107,10 @@ func process(conn net.Conn) {
 			out := conn.RemoteAddr().String()
 			delete(status, conn.RemoteAddr().String()) // tcp连接断开时删除对应的缓存
 			log.Println(out, " Login out")
-			fmt.Println(status)
 			return
 		}
 
-		recv := strings.TrimSpace(string(buf[:n])) // 删除接收到的换行符
-		fmt.Println(apiKey)
-		fmt.Println(status)
+		recv := strings.TrimSpace(string(buf[:n]))                                      // 删除接收到的换行符
 		if strings.HasPrefix(recv, "{") && len(apiKey) == 32 && connectUserName != "" { // 检查是否是命令格式
 			commandName, result := commandDealWicth(apiKey, connectUserName, recv, conn)
 			if !result { // 检查命令
