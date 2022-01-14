@@ -277,8 +277,9 @@ func redHeartBeat(heart *heartBeat, more *chatMore, statTime int, oId string, co
 	} else {
 		message := fmt.Sprintf("\n红包机器人: 稳住!!别急!!再等等!!成功率已经有%.2f%%了\n", rush*100)
 		connectMessage(message, conn)
+		moreContent(statTime, oId, conn)
+		return
 	}
-	moreContent(statTime, oId, conn)
 }
 
 func redRandomOrAverageOrMe(oId string, conn net.Conn) {
