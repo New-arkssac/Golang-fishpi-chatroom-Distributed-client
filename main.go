@@ -111,8 +111,7 @@ func process(conn net.Conn) {
 			log.Println(out, " Login out")
 			return
 		}
-		recv := strings.TrimSpace(string(buf[:n])) // 删除接收到的换行符
-		fmt.Println(recv)
+		recv := strings.TrimSpace(string(buf[:n]))                                            // 删除接收到的换行符
 		if strings.HasPrefix(recv, "-") && len((*m).ApiKey) == 32 && (*m).ConnectName != "" { // 检查是否是命令格式
 			commandName, result := commandDealWicth(recv, conn)
 			if !result { // 检查命令
@@ -144,7 +143,7 @@ func commandDealWicth(command string, conn net.Conn) (string, bool) { // 分发�
 	var m = status[conn.RemoteAddr().String()]
 	commandMap := make(map[string]string)
 	commandMap["-help"] = help
-	commandMap["-redinfo"] = fmt.Sprintf("\n红包机器人:\n用户名:%s\n共抢了%d个红包\n共获得%d积分\n被反抢%d积分\n总计收益%d\n",
+	commandMap["-redinfo"] = fmt.Sprintf("\n红包机器人:\n>用户名:%s\n>共抢了%d个红包\n>共获得%d积分\n>被反抢%d积分\n>总计收益%d\n",
 		(*m).ConnectName, (*m).RedStatus.Find, (*m).RedStatus.GetPoint, (*m).RedStatus.OutPoint, (*m).RedStatus.GetPoint-(*m).RedStatus.OutPoint)
 
 	if (*m).RedRobotStatus {
