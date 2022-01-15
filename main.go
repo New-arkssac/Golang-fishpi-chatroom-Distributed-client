@@ -22,7 +22,7 @@ type info struct { //登录用户信息结构体
 	ApiKey, ConnectName string
 	RedRobotStatus      bool
 	RedStatus           struct {
-		Find, GetPoint, OutPoint int
+		Find, GetPoint, OutPoint, MissRed int
 	}
 }
 
@@ -95,7 +95,8 @@ func process(conn net.Conn) {
 			Find     int
 			GetPoint int
 			OutPoint int
-		}{Find: 0, GetPoint: 0, OutPoint: 0},
+			MissRed  int
+		}{Find: 0, GetPoint: 0, OutPoint: 0, MissRed: 0},
 	}
 	var m = status[conn.RemoteAddr().String()]
 	connectMessage(login, conn)
@@ -143,8 +144,8 @@ func commandDealWicth(command string, conn net.Conn) (string, bool) { // 分发�
 	var m = status[conn.RemoteAddr().String()]
 	commandMap := make(map[string]string)
 	commandMap["-help"] = help
-	commandMap["-redinfo"] = fmt.Sprintf("\n红包机器人:\n>用户名:%s\n>共抢了%d个红包\n>共获得%d积分\n>被反抢%d积分\n>总计收益%d\n",
-		(*m).ConnectName, (*m).RedStatus.Find, (*m).RedStatus.GetPoint, (*m).RedStatus.OutPoint, (*m).RedStatus.GetPoint-(*m).RedStatus.OutPoint)
+	commandMap["-redinfo"] = fmt.Sprintf("\n红包机器人:\n>用户名:%s\n>共抢了%d个红包\n>共获得%d积分\n>被反抢%d积分\n>错过红包%d个\n>总计收益%d\n",
+		(*m).ConnectName, (*m).RedStatus.Find, (*m).RedStatus.GetPoint, (*m).RedStatus.OutPoint, (*m).RedStatus.MissRed, (*m).RedStatus.GetPoint+(*m).RedStatus.OutPoint)
 
 	if (*m).RedRobotStatus {
 		commandMap["-robot"] = "\n红包机器人已关闭\n"
@@ -279,7 +280,7 @@ func redHeartBeat(heart *heartBeat, more *chatMore, statTime int, oId string, co
 		go redRandomOrAverageOrMe(oId, conn)
 		return
 	} else {
-		message := fmt.Sprintf("\n红包机器人: 稳住!!别急!!再等等!!成功率已经有%.2f%%了\n", rush*100)
+		message := fmt.Sprintf("\n红包机器人: 稳住!!别急!!再等等!!成功率已经有%f%%了\n", rush*100)
 		connectMessage(message, conn)
 		moreContent(statTime, oId, conn)
 		return
@@ -325,6 +326,7 @@ func redRandomOrAverageOrMe(oId string, conn net.Conn) {
 		}
 	}
 	connectMessage("\n红包机器人: 呀哟，没抢到!!一定是网络的问题!!!\n", conn)
+	(*b).RedStatus.MissRed++
 
 }
 
@@ -418,9 +420,9 @@ func main() { // 主函数
 	flag.Parse()
 	localHost := fmt.Sprintf("%s:%s", host, port)
 	listen, err := net.Listen("tcp", localHost) // 建立tcp连接
-	log.Println("开始连接")
+	log.Printf("开始监听%s", port)
 	if err != nil {
-		log.Println("Listen error:", err)
+		log.Println("监听失败:", err)
 		return
 	}
 	for {
