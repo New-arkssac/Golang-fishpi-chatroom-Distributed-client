@@ -12,6 +12,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 type info struct { //登录用户信息结构体
 	ApiKey, ConnectName string
 	RedRobotStatus      bool
+	TimingTalk          bool
 	RedStatus           struct {
 		Find, GetPoint, OutPoint, MissRed int
 	}
@@ -76,8 +78,9 @@ var ( // 程序参数设置
 	header        = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.71 Safari/537.36"
 	login  string = "\n#请先登录: -yourNameOrEmail&&yourPassword #\n"
 	help   string = `
->   -robot 开启红包机器人
+>   -robot 开启红包机器人	//自动抢红包
 >   -redinfo 查看红包信息
+>   -timingtalk 定时说话
 `
 )
 
@@ -91,11 +94,9 @@ func process(conn net.Conn) {
 		ApiKey:         "",
 		ConnectName:    "",
 		RedRobotStatus: false,
+		TimingTalk:     false,
 		RedStatus: struct {
-			Find     int
-			GetPoint int
-			OutPoint int
-			MissRed  int
+			Find, GetPoint, OutPoint, MissRed int
 		}{Find: 0, GetPoint: 0, OutPoint: 0, MissRed: 0},
 	}
 	var m = status[conn.RemoteAddr().String()]
@@ -146,13 +147,21 @@ func commandDealWicth(command string, conn net.Conn) (string, bool) { // 分发�
 	commandMap["-help"] = help
 	commandMap["-redinfo"] = fmt.Sprintf("\n红包机器人:\n>用户名:%s\n>共抢了%d个红包\n>共获得%d积分\n>被反抢%d积分\n>错过红包%d个\n>总计收益%d\n",
 		(*m).ConnectName, (*m).RedStatus.Find, (*m).RedStatus.GetPoint, (*m).RedStatus.OutPoint, (*m).RedStatus.MissRed, (*m).RedStatus.GetPoint+(*m).RedStatus.OutPoint)
-
-	if (*m).RedRobotStatus {
-		commandMap["-robot"] = "\n红包机器人已关闭\n"
+	// redRobot
+	if (*m).RedRobotStatus && command == "-redrobot" {
+		commandMap["-redrobot"] = "\n红包机器人已关闭\n"
 		(*m).RedRobotStatus = false
-	} else {
-		commandMap["-robot"] = "\n红包机器人已开启\n"
+	} else if !(*m).RedRobotStatus && command == "-redrobot" {
+		commandMap["-redrobot"] = "\n红包机器人已开启\n"
 		(*m).RedRobotStatus = true
+	}
+	//timingTalk
+	if resul, _ := regexp.MatchString(`^-timingtalk\d+$`, command); resul && (*m).TimingTalk {
+		commandMap["-timingtalk"] = "\n定时说话模式已关闭\n"
+		(*m).TimingTalk = false
+	} else if resul, _ := regexp.MatchString(`^-timingtalk\d+$`, command); resul && !(*m).TimingTalk {
+		commandMap["-timingtalk"] = "\n定时说话模式已开启\n"
+		(*m).TimingTalk = true
 	}
 
 	if commandMap[command] == "" {
