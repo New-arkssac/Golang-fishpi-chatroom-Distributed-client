@@ -120,6 +120,7 @@ func process(conn net.Conn) {
 	}() // 函数结束时关闭tcp连接
 	go func() {
 		for i := range ch {
+			time.Sleep(time.Duration(m.TimingTalk.TalkMinit) * time.Minute)
 			if m.TimingTalk.ActivityStatus {
 				return
 			}
@@ -276,7 +277,6 @@ func getActivity(ch chan bool, conn net.Conn) {
 	type activity struct {
 		Liveness float64 `json:"liveness"`
 	}
-	time.Sleep(time.Duration(m.TimingTalk.TalkMinit) * time.Minute)
 	url := fmt.Sprintf("https://fishpi.cn/user/liveness?apiKey=%s", m.ApiKey)
 	request, err := http.NewRequest("GET", url, nil)
 	request.Header.Set("User-Agent", header)
