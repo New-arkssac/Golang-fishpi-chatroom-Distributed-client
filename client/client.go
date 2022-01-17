@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"time"
 )
 
 var ip string
@@ -28,19 +29,25 @@ func input(conn net.Conn) {
 			return
 		}
 		recv := strings.Split(string(buf[:m]), "\n")[0]
-		conn.Write([]byte(recv))
+		if num, writeErr := conn.Write([]byte(recv)); writeErr != nil {
+			log.Printf("写入失败%d次,err:%s", num, writeErr)
+		}
 	}
 }
 
 func main() {
 	flag.Parse()
 	host := fmt.Sprintf("%s:%s", ip, port)
-	conn, err := net.Dial("tcp", host)
+	conn, err := net.DialTimeout("tcp", host, 10*time.Second)
 	if err != nil {
 		log.Panicln("connect fail", err)
 		return
 	}
-	defer conn.Close()
+	defer func() {
+		if closeErr := conn.Close(); closeErr != nil {
+			log.Println("关闭失败:", closeErr)
+		}
+	}()
 	go input(conn)
 	for {
 		var buf [1024]byte

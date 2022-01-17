@@ -1,4 +1,4 @@
-module bulabula
+module Golang-fishpi-chatroom-Distributed-client
 
 go 1.17
 
