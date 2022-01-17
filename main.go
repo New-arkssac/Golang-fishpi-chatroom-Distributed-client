@@ -127,7 +127,9 @@ func process(conn net.Conn) {
 			}
 		}
 	}()
-	connectMessage(login, conn)
+	if i, err := conn.Write([]byte(login)); err != nil && i == 0 {
+		log.Println("connectMessage err:", err, i)
+	}
 	// 定时发送消息函数
 	go webSocketClient(conn) // 开启websocket会话
 	for {                    // 接收tcp连接会话的输入
@@ -148,7 +150,9 @@ func process(conn net.Conn) {
 			commandName, result := commandDealWicth(ch, recv, conn)
 			if !result { // 检查命令
 				message := fmt.Sprintf("\n%s执行失败\n", commandName)
-				connectMessage(message, conn)
+				if i, err := conn.Write([]byte(message)); err != nil && i == 0 {
+					log.Println("connectMessage err:", err, i)
+				}
 			}
 			continue
 		}
@@ -162,7 +166,9 @@ func process(conn net.Conn) {
 		}
 
 		if (*m).ApiKey == "" { // 检查是否拥有apiKey
-			connectMessage(login, conn)
+			if i, err := conn.Write([]byte(login)); err != nil && i == 0 {
+				log.Println("connectMessage err:", err, i)
+			}
 			continue
 		}
 		r := fmt.Sprintf("%s %s %s", conn.RemoteAddr().String(), (*m).ConnectName, recv)
@@ -215,7 +221,9 @@ func commandDealWicth(ch chan bool, command string, conn net.Conn) (string, bool
 		return command, false
 	}
 
-	connectMessage(commandMap[command], conn)
+	if i, err := conn.Write([]byte(commandMap[command])); err != nil && i == 0 {
+		log.Println("connectMessage err:", err, i)
+	}
 	return command, true
 }
 
@@ -259,12 +267,16 @@ func distribution(red *redInfo, m *chatRoom, conn net.Conn) {
 	var user = status[conn.RemoteAddr().String()]
 	if m.UserName != "" && m.UserMsg != "" { // 判断数据是否为空
 		message := fmt.Sprintf("\n[%s]%s(%s):\n%s\n\n", m.Time, m.UserNickName, m.UserName, m.UserMsg)
-		connectMessage(message, conn)
+		if i, err := conn.Write([]byte(message)); err != nil && i == 0 {
+			log.Println("connectMessage err:", err, i)
+		}
 		return
 	}
 	if red.MsgType == "redPacket" && len(user.ApiKey) == 32 && user.ConnectName != "" { // 判断是否是红包信息
 		message := fmt.Sprintf("\n[%s]%s(%s):\n红包(%s)\n", m.Time, m.UserNickName, m.UserName, red.Msg)
-		go connectMessage(message, conn)
+		if i, err := conn.Write([]byte(message)); err != nil && i == 0 {
+			log.Println("connectMessage err:", err, i)
+		}
 		go redPacketRobot(red.Type, red.Recivers, m.Oid, conn)
 		return
 	}
@@ -297,7 +309,9 @@ func getActivity(ch chan bool, conn net.Conn) {
 	}
 	if b.Liveness == 100.00 {
 		message := fmt.Sprintf("\n%s活跃度已满%.2f%%!\n", m.ConnectName, b.Liveness)
-		connectMessage(message, conn)
+		if i, err := conn.Write([]byte(message)); err != nil && i == 0 {
+			log.Println("connectMessage err:", err, i)
+		}
 		(*m).TimingTalk.TimingStatus = false
 		(*m).TimingTalk.ActivityStatus = true
 		return
@@ -311,22 +325,30 @@ func getActivity(ch chan bool, conn net.Conn) {
 func redPacketRobot(typee, recivers string, oId string, conn net.Conn) { // 红包机器人
 	if !status[conn.RemoteAddr().String()].RedRobotStatus { //验证是否开启
 		message := "\n红包机器人: 你错过了一个红包!!!!!!!!!!\n"
-		connectMessage(message, conn)
+		if i, err := conn.Write([]byte(message)); err != nil && i == 0 {
+			log.Println("connectMessage err:", err, i)
+		}
 		return
 	}
 
 	m := status[conn.RemoteAddr().String()]
 	(*m).RedStatus.Find++
 	if typee == "heartbeat" {
-		connectMessage("\n红包机器人: 发现心跳红包冲它!!\n", conn)
+		if i, err := conn.Write([]byte("\n红包机器人: 发现心跳红包冲它!!\n")); err != nil && i == 0 {
+			log.Println("connectMessage err:", err, i)
+		}
 		moreContent(time.Now().Second(), oId, conn)
 		return
 	}
 	if !strings.Contains(recivers, m.ConnectName) && recivers == "" || recivers == "[]" {
-		connectMessage("\n红包机器人: 发现红包!开始出击!\n", conn)
+		if i, err := conn.Write([]byte("\n红包机器人: 发现红包!开始出击!\n")); err != nil && i == 0 {
+			log.Println("connectMessage err:", err, i)
+		}
 		redRandomOrAverageOrMe(oId, conn)
 	} else {
-		connectMessage("\n红包机器人: 你的专属红包!\n", conn)
+		if i, err := conn.Write([]byte("\n红包机器人: 你的专属红包!\n")); err != nil && i == 0 {
+			log.Println("connectMessage err:", err, i)
+		}
 		redRandomOrAverageOrMe(oId, conn)
 	}
 
@@ -359,7 +381,9 @@ func moreContent(statTime int, oId string, conn net.Conn) { // 获取领取信�
 
 func redHeartBeat(heart *heartBeat, statTime int, oId string, conn net.Conn) {
 	if heart.Count == heart.Got {
-		connectMessage("\n红包机器人: 红包已经没了，出手慢了呀!!\n", conn)
+		if i, err := conn.Write([]byte("\n红包机器人: 红包已经没了，出手慢了呀!!\n")); err != nil && i == 0 {
+			log.Println("connectMessage err:", err, i)
+		}
 		return
 	}
 	if heart.Got == 0 || heart.Got != len(heart.Who) { // 判断是否有人领，没人领就继续递归
@@ -370,17 +394,23 @@ func redHeartBeat(heart *heartBeat, statTime int, oId string, conn net.Conn) {
 	for i := 0; i < heart.Got; i++ {
 		if heart.Who[i].UserMoney > 0 {
 			message := fmt.Sprintf("\n红包机器人: 已经被领了%d积分?超!这个红包不对劲!!快跑!!\n", heart.Who[i].UserMoney) //检查红包是否已经被人领取
-			connectMessage(message, conn)
+			if i, err := conn.Write([]byte(message)); err != nil && i == 0 {
+				log.Println("connectMessage err:", err, i)
+			}
 			return
 		}
 	}
 	if rush > 0.5 || time.Now().Second()-statTime > 2 || heart.Count-heart.Got == 1 { // 递归两秒后退出
-		connectMessage("\n红包机器人: 时间到了!!我忍不住了!!我冲了!!\n", conn)
+		if i, err := conn.Write([]byte("\n红包机器人: 时间到了!!我忍不住了!!我冲了!!\n")); err != nil && i == 0 {
+			log.Println("connectMessage err:", err, i)
+		}
 		go redRandomOrAverageOrMe(oId, conn)
 		return
 	} else {
 		message := fmt.Sprintf("\n红包机器人: 稳住!!别急!!再等等!!成功率已经有%f%%了\n", rush*float64(heart.Count))
-		connectMessage(message, conn)
+		if i, err := conn.Write([]byte(message)); err != nil && i == 0 {
+			log.Println("connectMessage err:", err, i)
+		}
 		moreContent(statTime, oId, conn)
 		return
 	}
@@ -414,30 +444,32 @@ func redRandomOrAverageOrMe(oId string, conn net.Conn) {
 		if m.Who[i].UserName == b.ConnectName {
 			if m.Who[i].GetMoney == 0 {
 				money := fmt.Sprintf("\n红包机器人: 呀哟，%d溢事件!!\n", m.Who[i].GetMoney)
-				connectMessage(money, conn)
+				if i, err := conn.Write([]byte(money)); err != nil && i == 0 {
+					log.Println("connectMessage err:", err, i)
+				}
 				return
 			}
 			if m.Who[i].GetMoney < 0 {
 				money := fmt.Sprintf("\n红包机器人: 超!被反偷了%d积分!!!\n", m.Who[i].GetMoney)
-				connectMessage(money, conn)
+				if i, err := conn.Write([]byte(money)); err != nil && i == 0 {
+					log.Println("connectMessage err:", err, i)
+				}
 				(*b).RedStatus.OutPoint += m.Who[i].GetMoney
 				return
 			}
 			money := fmt.Sprintf("\n红包机器人: 我帮你抢到了一个%d积分的红包!!!\n", m.Who[i].GetMoney)
-			connectMessage(money, conn)
+			if i, err := conn.Write([]byte(money)); err != nil && i == 0 {
+				log.Println("connectMessage err:", err, i)
+			}
 			(*b).RedStatus.GetPoint += m.Who[i].GetMoney
 			return
 		}
 	}
-	connectMessage("\n红包机器人: 呀哟，没抢到!!一定是网络的问题!!!\n", conn)
-	(*b).RedStatus.MissRed++
-
-}
-
-func connectMessage(message string, conn net.Conn) { // 客户端接收数据
-	if i, err := conn.Write([]byte(message)); err != nil {
+	if i, err := conn.Write([]byte("\n红包机器人: 呀哟，没抢到!!一定是网络的问题!!!\n")); err != nil && i == 0 {
 		log.Println("connectMessage err:", err, i)
 	}
+	(*b).RedStatus.MissRed++
+
 }
 
 func getApiKey(userName string, passwd string, conn net.Conn) (string, string) { // 获取apiKey
@@ -465,13 +497,17 @@ func getApiKey(userName string, passwd string, conn net.Conn) (string, string) {
 	}
 	if m["code"].(float64) == -1 { // 判断是否获取成功
 		msg := fmt.Sprintf("Login Message:%s\n", m["msg"].(string))
-		connectMessage(msg, conn)
+		if i, err := conn.Write([]byte(msg)); err != nil && i == 0 {
+			log.Println("connectMessage err:", err, i)
+		}
 		return m["msg"].(string), userName
 	}
 	connectUserName := getUserInfo(m["Key"].(string))
 	msg := fmt.Sprintf("Login Message:%s(%s)\n%s\n", connectUserName, m["Key"].(string), "输入-help查看命令信息\n")
 	log.Printf("%s %s Loging SUCCESS", conn.RemoteAddr().String(), connectUserName)
-	connectMessage(msg, conn)
+	if i, err := conn.Write([]byte(msg)); err != nil && i == 0 {
+		log.Println("connectMessage err:", err, i)
+	}
 	return m["Key"].(string), connectUserName
 }
 

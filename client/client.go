@@ -43,20 +43,18 @@ func main() {
 		log.Panicln("connect fail", err)
 		return
 	}
-	defer func() {
-		if closeErr := conn.Close(); closeErr != nil {
-			log.Println("关闭失败:", closeErr)
-		}
-	}()
 	go input(conn)
 	for {
 		var buf [1024]byte
 		read := bufio.NewReader(conn)
 		n, err := read.Read(buf[:])
-		if err != nil {
+		if err != nil && n == 0 {
 			fmt.Println("recv failed, err:", err)
+			if closeErr := conn.Close(); closeErr != nil {
+				log.Println("关闭失败:", closeErr)
+			}
 			return
 		}
-		fmt.Println(string(buf[:n]))
+		fmt.Println(string(buf[:]))
 	}
 }
