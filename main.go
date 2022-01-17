@@ -130,12 +130,7 @@ func process(conn net.Conn) {
 	connectMessage(login, conn)
 	// 定时发送消息函数
 	go webSocketClient(conn) // 开启websocket会话
-	defer func() {
-		if closeErr := conn.Close(); closeErr != nil {
-			log.Println(closeErr)
-		}
-	}() // 函数结束时关闭tcp连接
-	for { // 接收tcp连接会话的输入
+	for {                    // 接收tcp连接会话的输入
 		var buf [1024]byte
 		read := bufio.NewReader(conn)
 		n, err := read.Read(buf[:])
@@ -143,6 +138,9 @@ func process(conn net.Conn) {
 			out := conn.RemoteAddr().String()
 			delete(status, conn.RemoteAddr().String()) // tcp连接断开时删除对应的缓存
 			log.Println(out, " Login out")
+			if closeErr := conn.Close(); closeErr != nil {
+				log.Println(closeErr)
+			}
 			return
 		}
 		recv := strings.TrimSpace(string(buf[:n]))                                            // 删除接收到的换行符
