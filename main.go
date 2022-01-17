@@ -96,8 +96,8 @@ func init() {
 	flag.StringVar(&port, "p", "33333", "主机端口，默认33333")
 }
 
-func process(conn net.Conn) {
-	status[conn.RemoteAddr().String()] = &info{ // 初始化连接用户信息
+func process(id string, conn net.Conn) {
+	status[id] = &info{ // 初始化连接用户信息
 		ApiKey:         "",
 		ConnectName:    "",
 		RedRobotStatus: false,
@@ -111,7 +111,7 @@ func process(conn net.Conn) {
 		}{Find: 0, GetPoint: 0, OutPoint: 0, MissRed: 0},
 	}
 
-	var m = status[conn.RemoteAddr().String()]
+	var m = status[id]
 	var ch = make(chan bool, 1)
 	go func() {
 		for i := range ch {
@@ -123,22 +123,20 @@ func process(conn net.Conn) {
 				return
 			}
 			if m.TimingTalk.TimingStatus && i {
-				go getActivity(ch, conn)
+				go getActivity(id, ch, conn)
 			}
 		}
 	}()
-	if i, err := conn.Write([]byte(login)); err != nil && i == 0 {
-		log.Println("connectMessage err:", err, i)
-	}
+	_, _ = conn.Write([]byte(login))
 	// 定时发送消息函数
-	go webSocketClient(conn) // 开启websocket会话
-	for {                    // 接收tcp连接会话的输入
+	go webSocketClient(id, conn) // 开启websocket会话
+	for {                        // 接收tcp连接会话的输入
 		var buf [1024]byte
 		read := bufio.NewReader(conn)
 		n, err := read.Read(buf[:])
 		if err != nil {
 			out := conn.RemoteAddr().String()
-			delete(status, conn.RemoteAddr().String()) // tcp连接断开时删除对应的缓存
+			delete(status, id) // tcp连接断开时删除对应的缓存
 			log.Println(out, " Login out")
 			if closeErr := conn.Close(); closeErr != nil {
 				log.Println(closeErr)
@@ -147,7 +145,7 @@ func process(conn net.Conn) {
 		}
 		recv := strings.TrimSpace(string(buf[:n]))                                            // 删除接收到的换行符
 		if strings.HasPrefix(recv, "-") && len((*m).ApiKey) == 32 && (*m).ConnectName != "" { // 检查是否是命令格式
-			commandName, result := commandDealWicth(ch, recv, conn)
+			commandName, result := commandDealWicth(id, ch, recv, conn)
 			if !result { // 检查命令
 				message := fmt.Sprintf("\n%s执行失败\n", commandName)
 				if i, err := conn.Write([]byte(message)); err != nil && i == 0 {
@@ -177,8 +175,8 @@ func process(conn net.Conn) {
 	}
 }
 
-func commandDealWicth(ch chan bool, command string, conn net.Conn) (string, bool) { // 分发命令函数
-	var m = status[conn.RemoteAddr().String()]
+func commandDealWicth(id string, ch chan bool, command string, conn net.Conn) (string, bool) { // 分发命令函数
+	var m = status[id]
 	commandMap := make(map[string]string)
 	//  help
 	commandMap["-help"] = help
@@ -227,7 +225,7 @@ func commandDealWicth(ch chan bool, command string, conn net.Conn) (string, bool
 	return command, true
 }
 
-func webSocketClient(connect net.Conn) {
+func webSocketClient(id string, connect net.Conn) {
 	client := websocket.Dialer{}
 	conn, _, err := client.Dial("wss://fishpi.cn/chat-room-channel", nil) // 连接摸鱼派聊天室
 	if err != nil {
@@ -259,12 +257,12 @@ func webSocketClient(connect net.Conn) {
 				log.Println("red Message get error2", err2)
 			}
 		}
-		go distribution(&red, &m, connect) // 分发数据
+		go distribution(id, &red, &m, connect) // 分发数据
 	}
 }
 
-func distribution(red *redInfo, m *chatRoom, conn net.Conn) {
-	var user = status[conn.RemoteAddr().String()]
+func distribution(id string, red *redInfo, m *chatRoom, conn net.Conn) {
+	var user = status[id]
 	if m.UserName != "" && m.UserMsg != "" { // 判断数据是否为空
 		message := fmt.Sprintf("\n[%s]%s(%s):\n%s\n\n", m.Time, m.UserNickName, m.UserName, m.UserMsg)
 		if i, err := conn.Write([]byte(message)); err != nil && i == 0 {
@@ -277,13 +275,13 @@ func distribution(red *redInfo, m *chatRoom, conn net.Conn) {
 		if i, err := conn.Write([]byte(message)); err != nil && i == 0 {
 			log.Println("connectMessage err:", err, i)
 		}
-		go redPacketRobot(red.Type, red.Recivers, m.Oid, conn)
+		go redPacketRobot(id, red.Type, red.Recivers, m.Oid, conn)
 		return
 	}
 }
 
-func getActivity(ch chan bool, conn net.Conn) {
-	m := status[conn.RemoteAddr().String()]
+func getActivity(id string, ch chan bool, conn net.Conn) {
+	m := status[id]
 	if m == nil {
 		return
 	}
@@ -322,8 +320,8 @@ func getActivity(ch chan bool, conn net.Conn) {
 	ch <- true
 }
 
-func redPacketRobot(typee, recivers string, oId string, conn net.Conn) { // 红包机器人
-	if !status[conn.RemoteAddr().String()].RedRobotStatus { //验证是否开启
+func redPacketRobot(id string, typee, recivers string, oId string, conn net.Conn) { // 红包机器人
+	if !status[id].RedRobotStatus { //验证是否开启
 		message := "\n红包机器人: 你错过了一个红包!!!!!!!!!!\n"
 		if i, err := conn.Write([]byte(message)); err != nil && i == 0 {
 			log.Println("connectMessage err:", err, i)
@@ -331,29 +329,29 @@ func redPacketRobot(typee, recivers string, oId string, conn net.Conn) { // 红�
 		return
 	}
 
-	m := status[conn.RemoteAddr().String()]
+	m := status[id]
 	(*m).RedStatus.Find++
 	if typee == "heartbeat" {
 		if i, err := conn.Write([]byte("\n红包机器人: 发现心跳红包冲它!!\n")); err != nil && i == 0 {
 			log.Println("connectMessage err:", err, i)
 		}
-		moreContent(time.Now().Second(), oId, conn)
+		moreContent(time.Now().Second(), id, oId, conn)
 		return
 	}
 	if !strings.Contains(recivers, m.ConnectName) && recivers == "" || recivers == "[]" {
 		if i, err := conn.Write([]byte("\n红包机器人: 发现红包!开始出击!\n")); err != nil && i == 0 {
 			log.Println("connectMessage err:", err, i)
 		}
-		redRandomOrAverageOrMe(oId, conn)
+		redRandomOrAverageOrMe(id, oId, conn)
 	} else {
 		if i, err := conn.Write([]byte("\n红包机器人: 你的专属红包!\n")); err != nil && i == 0 {
 			log.Println("connectMessage err:", err, i)
 		}
-		redRandomOrAverageOrMe(oId, conn)
+		redRandomOrAverageOrMe(id, oId, conn)
 	}
 
 }
-func moreContent(statTime int, oId string, conn net.Conn) { // 获取领取信息
+func moreContent(statTime int, id, oId string, conn net.Conn) { // 获取领取信息
 	var more chatMore
 	var heart heartBeat
 	request, err := http.NewRequest("GET", "https://fishpi.cn/chat-room/more?page=1", nil)
@@ -370,16 +368,16 @@ func moreContent(statTime int, oId string, conn net.Conn) { // 获取领取信�
 		log.Println(err2)
 	}
 	if strings.Contains(more.Data[0].Content, "<") {
-		moreContent(statTime, oId, conn)
+		moreContent(statTime, id, oId, conn)
 		return
 	}
 	if err3 := json.Unmarshal([]byte(more.Data[0].Content), &heart); err3 != nil {
 		log.Println(err3)
 	}
-	redHeartBeat(&heart, statTime, oId, conn)
+	redHeartBeat(&heart, statTime, id, oId, conn)
 }
 
-func redHeartBeat(heart *heartBeat, statTime int, oId string, conn net.Conn) {
+func redHeartBeat(heart *heartBeat, statTime int, id, oId string, conn net.Conn) {
 	if heart.Count == heart.Got {
 		if i, err := conn.Write([]byte("\n红包机器人: 红包已经没了，出手慢了呀!!\n")); err != nil && i == 0 {
 			log.Println("connectMessage err:", err, i)
@@ -387,7 +385,7 @@ func redHeartBeat(heart *heartBeat, statTime int, oId string, conn net.Conn) {
 		return
 	}
 	if heart.Got == 0 || heart.Got != len(heart.Who) { // 判断是否有人领，没人领就继续递归
-		moreContent(statTime, oId, conn)
+		moreContent(statTime, id, oId, conn)
 		return
 	}
 	rush := 1 / (float64(heart.Count) - float64(heart.Got))
@@ -404,21 +402,20 @@ func redHeartBeat(heart *heartBeat, statTime int, oId string, conn net.Conn) {
 		if i, err := conn.Write([]byte("\n红包机器人: 时间到了!!我忍不住了!!我冲了!!\n")); err != nil && i == 0 {
 			log.Println("connectMessage err:", err, i)
 		}
-		go redRandomOrAverageOrMe(oId, conn)
+		go redRandomOrAverageOrMe(id, oId, conn)
 		return
 	} else {
 		message := fmt.Sprintf("\n红包机器人: 稳住!!别急!!再等等!!成功率已经有%f%%了\n", rush*float64(heart.Count))
 		if i, err := conn.Write([]byte(message)); err != nil && i == 0 {
 			log.Println("connectMessage err:", err, i)
 		}
-		moreContent(statTime, oId, conn)
+		moreContent(statTime, id, oId, conn)
 		return
 	}
 }
 
-func redRandomOrAverageOrMe(oId string, conn net.Conn) {
-	b := status[conn.RemoteAddr().String()]
-	fmt.Println(b)
+func redRandomOrAverageOrMe(id, oId string, conn net.Conn) {
+	b := status[id]
 	requestBody := fmt.Sprintf(`{"apiKey": "%s", "oId": "%s"}`, b.ApiKey, oId)
 	request, err := http.NewRequest("POST", "https://fishpi.cn/chat-room/red-packet/open", bytes.NewReader([]byte(requestBody))) // 开启红包
 	request.Header.Set("User-Agent", header)
@@ -585,12 +582,13 @@ func main() { // 主函数
 	}
 	for {
 		connent, err := listen.Accept() //等待tcp连接
+		id := md5Hash(time.Now().String())
 		log.Println(connent.RemoteAddr().String() + " Connect SUCCESS")
 		if err != nil {
 			log.Println("Accept error:", err)
 			continue
 		}
-		go process(connent) // 创建tcp会话
+		go process(id, connent) // 创建tcp会话
 	}
 
 }
