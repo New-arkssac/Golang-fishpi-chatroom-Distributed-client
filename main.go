@@ -113,7 +113,6 @@ func process(conn net.Conn) {
 
 	var m = status[conn.RemoteAddr().String()]
 	var ch = make(chan bool, 1)
-<<<<<<< HEAD
 	go func() {
 		for i := range ch {
 			if m == nil {
@@ -131,33 +130,12 @@ func process(conn net.Conn) {
 	connectMessage(login, conn)
 	// 定时发送消息函数
 	go webSocketClient(conn) // 开启websocket会话
-=======
->>>>>>> 254bba4724c55eae4f07aeb15e3c142eb84d0f6a
 	defer func() {
 		if closeErr := conn.Close(); closeErr != nil {
 			log.Println(closeErr)
 		}
-<<<<<<< HEAD
 	}()   // 函数结束时关闭tcp连接
 	for { // 接收tcp连接会话的输入
-=======
-	}() // 函数结束时关闭tcp连接
-	go func() {
-		for i := range ch {
-			time.Sleep(time.Duration(m.TimingTalk.TalkMinit) * time.Minute)
-			if m.TimingTalk.ActivityStatus {
-				return
-			}
-			if m.TimingTalk.TimingStatus && i {
-				go getActivity(ch, conn)
-			}
-		}
-	}()
-	connectMessage(login, conn)
-	// 定时发送消息函数
-	go webSocketClient(conn) // 开启websocket会话
-	for {                    // 接收tcp连接会话的输入
->>>>>>> 254bba4724c55eae4f07aeb15e3c142eb84d0f6a
 		var buf [1024]byte
 		read := bufio.NewReader(conn)
 		n, err := read.Read(buf[:])
