@@ -134,7 +134,7 @@ func process(conn net.Conn) {
 		if closeErr := conn.Close(); closeErr != nil {
 			log.Println(closeErr)
 		}
-	}()   // 函数结束时关闭tcp连接
+	}() // 函数结束时关闭tcp连接
 	for { // 接收tcp连接会话的输入
 		var buf [1024]byte
 		read := bufio.NewReader(conn)
@@ -264,7 +264,7 @@ func distribution(red *redInfo, m *chatRoom, conn net.Conn) {
 		connectMessage(message, conn)
 		return
 	}
-	if red.MsgType == "redPacket" && user.ApiKey != "" && user.ConnectName != "" { // 判断是否是红包信息
+	if red.MsgType == "redPacket" && len(user.ApiKey) == 32 && user.ConnectName != "" { // 判断是否是红包信息
 		message := fmt.Sprintf("\n[%s]%s(%s):\n红包(%s)\n", m.Time, m.UserNickName, m.UserName, red.Msg)
 		go connectMessage(message, conn)
 		go redPacketRobot(red.Type, red.Recivers, m.Oid, conn)
@@ -298,7 +298,7 @@ func getActivity(ch chan bool, conn net.Conn) {
 		log.Println("活跃度json转码失败:", err3)
 	}
 	if b.Liveness == 100.00 {
-		message := fmt.Sprintf("\n%s活跃度已满%2f%%!\n", m.ConnectName, b.Liveness)
+		message := fmt.Sprintf("\n%s活跃度已满%.2f%%!\n", m.ConnectName, b.Liveness)
 		connectMessage(message, conn)
 		(*m).TimingTalk.TimingStatus = false
 		(*m).TimingTalk.ActivityStatus = true
@@ -311,7 +311,7 @@ func getActivity(ch chan bool, conn net.Conn) {
 }
 
 func redPacketRobot(typee, recivers string, oId string, conn net.Conn) { // 红包机器人
-	if !status[conn.RemoteAddr().String()].RedRobotStatus {              //验证是否开启
+	if !status[conn.RemoteAddr().String()].RedRobotStatus { //验证是否开启
 		message := "\n红包机器人: 你错过了一个红包!!!!!!!!!!\n"
 		connectMessage(message, conn)
 		return
@@ -381,7 +381,7 @@ func redHeartBeat(heart *heartBeat, statTime int, oId string, conn net.Conn) {
 		go redRandomOrAverageOrMe(oId, conn)
 		return
 	} else {
-		message := fmt.Sprintf("\n红包机器人: 稳住!!别急!!再等等!!成功率已经有%f%%了\n", rush*100)
+		message := fmt.Sprintf("\n红包机器人: 稳住!!别急!!再等等!!成功率已经有%f%%了\n", rush*float64(heart.Count))
 		connectMessage(message, conn)
 		moreContent(statTime, oId, conn)
 		return
