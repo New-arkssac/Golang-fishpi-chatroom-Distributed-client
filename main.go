@@ -260,6 +260,8 @@ func distribution(b *info, red *redInfo, m *chatRoom, conn net.Conn) {
 		return
 	}
 	if red.MsgType == "redPacket" { // 判断是否是红包信息
+		message := fmt.Sprintf("\n[%s]%s(%s):\n红包！！！！！(%s)\n\n", m.Time, m.UserNickName, m.UserName, red.Msg)
+		sendForClient(message, conn)
 		redPacketRobot(b, red.Type, red.Recivers, m.Oid, conn)
 		return
 	}
