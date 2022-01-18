@@ -302,13 +302,12 @@ func getActivity(m *info, ch chan bool, conn net.Conn) {
 }
 
 func redPacketRobot(m *info, typee, recivers string, oId string, conn net.Conn) { // 红包机器人
-	fmt.Println(m)
+	fmt.Println(len(m.ApiKey))
 	if !m.RedRobotStatus && len(m.ApiKey) != 32 { //验证是否开启
 		message := "\n红包机器人: 你错过了一个红包!!!!!!!!!!\n"
 		sendForClient(message, conn)
 		return
 	}
-
 	m.RedStatus.Find++
 	if typee == "heartbeat" {
 		sendForClient("\n红包机器人: 发现心跳红包冲它!!\n", conn)
