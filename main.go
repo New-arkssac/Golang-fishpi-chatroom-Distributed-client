@@ -302,6 +302,7 @@ func getActivity(m *info, ch chan bool, conn net.Conn) {
 }
 
 func redPacketRobot(m *info, typee, recivers string, oId string, conn net.Conn) { // 红包机器人
+	fmt.Println(m)
 	if !m.RedRobotStatus && len(m.ApiKey) != 32 { //验证是否开启
 		message := "\n红包机器人: 你错过了一个红包!!!!!!!!!!\n"
 		sendForClient(message, conn)
