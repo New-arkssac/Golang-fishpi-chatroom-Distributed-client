@@ -255,16 +255,14 @@ func webSocketClient(b *info, connect net.Conn) {
 
 func distribution(b *info, red *redInfo, m *chatRoom, conn net.Conn) {
 	if m.UserName != "" && m.UserMsg != "" { // 判断数据是否为空
-		message := fmt.Sprintf("\n[%s]%s(%s):\n%s\n\n", m.Time, m.UserNickName, m.UserName, m.UserMsg+red.Msg)
+		message := fmt.Sprintf("\n[%s]%s(%s):\n%s\n\n", m.Time, m.UserNickName, m.UserName, m.UserMsg)
 		sendForClient(message, conn)
 		return
 	}
-	if red.MsgType == "redPacket" && len(b.ApiKey) == 32 && b.RedRobotStatus { // 判断是否是红包信息
+	if red.MsgType == "redPacket" { // 判断是否是红包信息
 		redPacketRobot(b, red.Type, red.Recivers, m.Oid, conn)
 		return
 	}
-	message := "\n红包机器人: 你错过了一个红包!!!!!!!!!!\n"
-	sendForClient(message, conn)
 }
 
 func getActivity(m *info, ch chan bool, conn net.Conn) {
@@ -302,6 +300,11 @@ func getActivity(m *info, ch chan bool, conn net.Conn) {
 }
 
 func redPacketRobot(m *info, typee, recivers string, oId string, conn net.Conn) { // 红包机器人
+	if !m.RedRobotStatus {
+		message := "\n红包机器人: 你错过了一个红包!!!!!!!!!!\n"
+		sendForClient(message, conn)
+		return
+	}
 	m.RedStatus.Find++
 	if typee == "heartbeat" {
 		sendForClient("\n红包机器人: 发现心跳红包冲它!!\n", conn)
