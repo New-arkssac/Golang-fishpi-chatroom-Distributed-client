@@ -256,13 +256,12 @@ func webSocketClient(id string, connect net.Conn) {
 }
 
 func distribution(id string, red *redInfo, m *chatRoom, conn net.Conn) {
-	var user = status[id]
 	if m.UserName != "" && m.UserMsg != "" { // 判断数据是否为空
 		message := fmt.Sprintf("\n[%s]%s(%s):\n%s\n\n", m.Time, m.UserNickName, m.UserName, m.UserMsg)
 		sendForClient(message, conn)
 		return
 	}
-	if red.MsgType == "redPacket" && len(user.ApiKey) == 32 && user.ConnectName != "" { // 判断是否是红包信息
+	if red.MsgType == "redPacket" { // 判断是否是红包信息
 		message := fmt.Sprintf("\n[%s]%s(%s):\n红包(%s)\n", m.Time, m.UserNickName, m.UserName, red.Msg)
 		sendForClient(message, conn)
 		go redPacketRobot(id, red.Type, red.Recivers, m.Oid, conn)
@@ -309,7 +308,7 @@ func getActivity(id string, ch chan bool, conn net.Conn) {
 }
 
 func redPacketRobot(id string, typee, recivers string, oId string, conn net.Conn) { // 红包机器人
-	if !status[id].RedRobotStatus { //验证是否开启
+	if status[id] == nil && !status[id].RedRobotStatus && len(status[id].ApiKey) != 32 { //验证是否开启
 		message := "\n红包机器人: 你错过了一个红包!!!!!!!!!!\n"
 		sendForClient(message, conn)
 		return
