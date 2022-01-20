@@ -23,6 +23,7 @@ import (
 
 type info struct { //登录用户信息结构体
 	ApiKey, ConnectName string
+	ConnectMsg          []string
 	RedRobotStatus      bool
 	TimingTalk          struct {
 		TimingStatus, ActivityStatus bool
@@ -86,7 +87,12 @@ var ( // 程序参数设置
 >   -help 查看帮助信息
 >   -redrobot 开启红包机器人	//自动抢红包
 >   -redinfo 查看红包信息
->   -timingtalk 定时说话	//-timingtalk:5 小冰 说个笑话 设置随机1-5分钟就自动发送小冰 说个笑话直到活跃度是百分百就停止
+>   -timingtalk 定时说话	//-timingtalk:5 设置随机1-5分钟就自动发送直到活跃度是百分百就停止
+>	-timingtalkm 查看定时说话列表 //-timingtalk:哈哈哈 添加"哈哈哈"进入定时说话列表
+>	-sendred  发送红包	//-sendred-32-specify-bulabula 发送拼手气32积分的红包,最低32，如果要发专属红包在末尾加上用户名 
+	>> type:random、heartbeat、specify、average
+>	-nowactive	获取当前活跃度
+>	-connectmsg	查看当前用户消息历史记录
 
 `
 )
@@ -97,20 +103,6 @@ func init() {
 }
 
 func process(id string, conn net.Conn) {
-	//status[id] = &info{ // 初始化连接用户信息
-	//	ApiKey:         "",
-	//	ConnectName:    "",
-	//	RedRobotStatus: false,
-	//	TimingTalk: struct {
-	//		TimingStatus, ActivityStatus bool
-	//		TalkMessage                  []string
-	//		TalkMinit                    int
-	//	}{ActivityStatus: false, TalkMessage: []string{}, TalkMinit: 5},
-	//	RedStatus: struct {
-	//		Find, GetPoint, OutPoint, MissRed int
-	//	}{Find: 0, GetPoint: 0, OutPoint: 0, MissRed: 0},
-	//}
-
 	var m = status[id]
 	var ch = make(chan bool, 1)
 	go func() {
@@ -122,7 +114,12 @@ func process(id string, conn net.Conn) {
 				rand.Seed(time.Now().Unix())
 				num := rand.Intn(m.TimingTalk.TalkMinit)
 				time.Sleep(time.Duration(num+1) * time.Minute)
-				go getActivity(&m, ch, conn)
+				if getStatus := getActivity(&m, conn); getStatus != 100 {
+					rand.Seed(time.Now().Unix())
+					num = rand.Intn(len(m.TimingTalk.TalkMessage))
+					sendClientMessage(m.TimingTalk.TalkMessage[num], m.ApiKey, "", "", 0) // 发送用户输入的消息
+					ch <- true
+				}
 			}
 		}
 	}()
@@ -164,9 +161,10 @@ func process(id string, conn net.Conn) {
 			sendForClient(login, conn)
 			continue
 		}
-		r := fmt.Sprintf("%s %s %s", conn.RemoteAddr().String(), m.ConnectName, recv)
-		log.Println(r)                    // tcp会话输入历史记录
-		sendClientMessage(recv, m.ApiKey) // 发送用户输入的消息
+		r := fmt.Sprintf("%v-%v-%v %v:%v:%v%v %s %s %s", time.Now().Year(), time.Now().Month(), time.Now().Day(),
+			time.Now().Hour(), time.Now().Minute(), time.Now().Second(), conn.RemoteAddr().String(), m.ConnectName, recv)
+		m.ConnectMsg = append(m.ConnectMsg, r)
+		sendClientMessage(recv, m.ApiKey, "", "", 0) // 发送用户输入的消息
 	}
 }
 
@@ -174,11 +172,30 @@ func commandDealWicth(m *info, ch chan bool, command string, conn net.Conn) (str
 	commandMap := make(map[string]string)
 	//  help
 	commandMap["-help"] = help
+
 	// redinfo
 	commandMap["-redinfo"] = fmt.Sprintf("\n红包机器人:\n>用户名:%s\n>共抢了%d个红包\n>共获得%d积分\n>被反抢%d积分\n"+
 		">错过红包%d个\n>总计收益%d\n",
 		m.ConnectName, m.RedStatus.Find, m.RedStatus.GetPoint, m.RedStatus.OutPoint, m.RedStatus.MissRed,
 		m.RedStatus.GetPoint+m.RedStatus.OutPoint)
+	commandMap["-nowactive"] = fmt.Sprintf("\n当前%s用户的活跃度是%f", m.ConnectName, getActivity(m, conn))
+	commandMap["-connectmsg"] = fmt.Sprintf("%s %v", m.ConnectName, m.ConnectMsg)
+
+	// timingtalkm
+	if len(m.TimingTalk.TalkMessage) == 0 {
+		m.TimingTalk.TalkMessage = append(m.TimingTalk.TalkMessage, "小冰 说个笑话")
+		m.TimingTalk.TalkMessage = append(m.TimingTalk.TalkMessage, "小冰 lsp排行榜")
+		m.TimingTalk.TalkMessage = append(m.TimingTalk.TalkMessage, "小冰 你人呢？")
+		m.TimingTalk.TalkMessage = append(m.TimingTalk.TalkMessage, "小冰 去打劫")
+		m.TimingTalk.TalkMessage = append(m.TimingTalk.TalkMessage, "摸鱼办第一纪律委提醒您：\n聊天千万条，友善第一条;"+
+			"\n灌水不规范，扣分两行泪。\n我正在认真巡逻中，不要被我逮到哦～![doge](https://cdn.jsdelivr.net/npm/vditor/dist/images/"+
+			"emoji/doge.png)\n详细社区守则请看：[摸鱼守则](https://fishpi.cn/article/1631779202219)")
+	}
+	if resul, _ := regexp.MatchString(`^-timingtalk:\w+$`, command); resul && m.TimingTalk.ActivityStatus {
+		m.TimingTalk.TalkMessage = append(m.TimingTalk.TalkMessage, "小冰 去打劫")
+	}
+	commandMap["-timingtalkm"] = fmt.Sprintln(m.TimingTalk.TalkMessage)
+
 	// redRobot
 	if command == "-redrobot" && m.RedRobotStatus {
 		commandMap["-redrobot"] = "\n红包机器人已关闭\n\n"
@@ -187,26 +204,44 @@ func commandDealWicth(m *info, ch chan bool, command string, conn net.Conn) (str
 		commandMap["-redrobot"] = "\n红包机器人已开启\n\n"
 		m.RedRobotStatus = true
 	}
+
 	//timingTalk
-	if resul, _ := regexp.MatchString(`^-timingtalk:\d+\s.*$`, command); resul && m.TimingTalk.ActivityStatus {
+	if resul, _ := regexp.MatchString(`^-timingtalk:\d+$`, command); resul && m.TimingTalk.ActivityStatus {
 		commandMap[command] = "\n活跃度已满请不要再开启定时说话模式\n\n"
 	} else if command == "-timingtalk" {
 		commandMap[command] = "\n定时说话模式已关闭\n\n"
 		m.TimingTalk.TalkMinit = 0
 		m.TimingTalk.TimingStatus = false
-	} else if resul, _ := regexp.MatchString(`^-timingtalk:\d+\s.*$`, command); resul {
+	} else if resul, _ := regexp.MatchString(`^-timingtalk:\d+$`, command); resul {
 		out1 := regexp.MustCompile(`\d+`).FindStringSubmatch(command)
-		out2 := regexp.MustCompile(`\s.*$`).FindStringSubmatch(command)
 		i, _ := strconv.ParseInt(out1[0], 10, 0)
-		if i < 5 {
-			commandMap[command] = "\n定时说话模式已失败,定时时间不允许小于5分钟\n\n"
-			return command, false
+		if i < 5 || i > 20 {
+			commandMap[command] = "\n定时说话模式已失败,定时时间不允许小于5分钟大于20分钟\n\n"
+		} else {
+			commandMap[command] = "\n定时说话模式已开启\n\n"
+			m.TimingTalk.TalkMinit = int(i)
+			m.TimingTalk.TimingStatus = true
+			ch <- true
 		}
-		commandMap[command] = "\n定时说话模式已开启\n\n"
-		m.TimingTalk.TalkMessage = append(m.TimingTalk.TalkMessage, out2[0])
-		m.TimingTalk.TalkMinit = int(i)
-		m.TimingTalk.TimingStatus = true
-		ch <- true
+	}
+
+	// sendred
+	if resul, _ := regexp.MatchString(`^-sendred-\d+-(random|heartbeat|specify|average)-`, command); resul {
+		out1 := regexp.MustCompile(`(random|heartbeat|specify|average)`).FindStringSubmatch(command)
+		out2 := regexp.MustCompile(`\d+`).FindAllStringSubmatch(command, 2)
+		out3 := regexp.MustCompile(`\w+$`).FindStringSubmatch(command)
+		i, _ := strconv.ParseInt(out2[0][0], 10, 0)
+		if i < 32 {
+			commandMap[command] = "\n不允许发送小于32积分的红包\n\n"
+		} else {
+			commandMap[command] = fmt.Sprintf("开始发送%s红包", out1[0])
+			typeMap := make(map[string]string)
+			typeMap["random"] = "摸鱼着，事竟成！"
+			typeMap["heartbeat"] = "玩的就是心跳！"
+			typeMap["average"] = "平分红包，人人有份！"
+			typeMap["specify"] = "试试看，这是给你的红包吗？"
+			go sendClientMessage(typeMap[out1[0]], m.ApiKey, out1[0], out3[0], i)
+		}
 	}
 
 	if commandMap[command] == "" {
@@ -267,7 +302,7 @@ func distribution(b *info, red *redInfo, m *chatRoom, conn net.Conn) {
 	}
 }
 
-func getActivity(m *info, ch chan bool, conn net.Conn) {
+func getActivity(m *info, conn net.Conn) float64 {
 	type activity struct {
 		Liveness float64 `json:"liveness"`
 	}
@@ -293,18 +328,16 @@ func getActivity(m *info, ch chan bool, conn net.Conn) {
 		sendForClient(message, conn)
 		m.TimingTalk.TimingStatus = false
 		m.TimingTalk.ActivityStatus = true
-		return
+		return b.Liveness
 	}
-	rand.Seed(time.Now().Unix())
-	num := rand.Intn(len(m.TimingTalk.TalkMessage))
-	sendClientMessage(m.TimingTalk.TalkMessage[num], m.ApiKey)
-	ch <- true
+	return b.Liveness
 }
 
 func redPacketRobot(m *info, typee, recivers string, oId string, conn net.Conn) { // 红包机器人
 	if !m.RedRobotStatus {
 		message := "\n红包机器人: 你错过了一个红包!!!!!!!!!!\n"
 		sendForClient(message, conn)
+		m.RedStatus.MissRed++
 		return
 	}
 	m.RedStatus.Find++
@@ -322,7 +355,7 @@ func redPacketRobot(m *info, typee, recivers string, oId string, conn net.Conn) 
 	}
 
 }
-func moreContent(statTime int, m *info, oId string, conn net.Conn) { // 获取领取信息
+func moreContent(nowTime int, m *info, oId string, conn net.Conn) { // 获取领取信息
 	var more chatMore
 	var heart heartBeat
 	request, err := http.NewRequest("GET", "https://fishpi.cn/chat-room/more?page=1", nil)
@@ -339,22 +372,22 @@ func moreContent(statTime int, m *info, oId string, conn net.Conn) { // 获取�
 		log.Println(err2)
 	}
 	if strings.Contains(more.Data[0].Content, "<") {
-		moreContent(statTime, m, oId, conn)
+		moreContent(nowTime, m, oId, conn)
 		return
 	}
 	if err3 := json.Unmarshal([]byte(more.Data[0].Content), &heart); err3 != nil {
 		log.Println(err3)
 	}
-	redHeartBeat(&heart, m, statTime, oId, conn)
+	redHeartBeat(&heart, m, nowTime, oId, conn)
 }
 
-func redHeartBeat(heart *heartBeat, m *info, statTime int, oId string, conn net.Conn) {
+func redHeartBeat(heart *heartBeat, m *info, nowTime int, oId string, conn net.Conn) {
 	if heart.Count == heart.Got {
 		sendForClient("\n红包机器人: 红包已经没了，出手慢了呀!!\n", conn)
 		return
 	}
 	if heart.Got == 0 || heart.Got != len(heart.Who) { // 判断是否有人领，没人领就继续递归
-		moreContent(statTime, m, oId, conn)
+		moreContent(nowTime, m, oId, conn)
 		return
 	}
 	rush := 1 / (float64(heart.Count) - float64(heart.Got))
@@ -365,19 +398,20 @@ func redHeartBeat(heart *heartBeat, m *info, statTime int, oId string, conn net.
 			return
 		}
 	}
-	if rush > 0.5 || time.Now().Second()-statTime > 2 || heart.Count-heart.Got == 1 { // 递归两秒后退出
+	if rush > 0.5 || time.Now().Second()-nowTime > 2 || heart.Count-heart.Got == 1 { // 递归两秒后退出
 		sendForClient("\n红包机器人: 时间到了!!我忍不住了!!我冲了!!\n", conn)
 		go redRandomOrAverageOrMe(m, oId, conn)
 		return
 	} else {
 		message := fmt.Sprintf("\n红包机器人: 稳住!!别急!!再等等!!成功率已经有%f%%了\n", rush*float64(heart.Count))
 		sendForClient(message, conn)
-		moreContent(statTime, m, oId, conn)
+		moreContent(nowTime, m, oId, conn)
 		return
 	}
 }
 
 func redRandomOrAverageOrMe(b *info, oId string, conn net.Conn) {
+	time.Sleep(2 * time.Second)
 	requestBody := fmt.Sprintf(`{"apiKey": "%s", "oId": "%s"}`, b.ApiKey, oId)
 	request, err := http.NewRequest("POST", "https://fishpi.cn/chat-room/red-packet/open",
 		bytes.NewReader([]byte(requestBody))) // 开启红包
@@ -505,11 +539,14 @@ func md5Hash(sum string) string { // md5加密
 	return hash
 }
 
-func sendClientMessage(msg, apiKey string) { // 发送客户端发送的数据
+func sendClientMessage(msg, apiKey, typee, name string, num int64) { // 发送客户端发送的数据
 	if strings.HasPrefix(msg, "-") && strings.Contains(msg, "&&") {
 		return
 	}
 	requestBody := fmt.Sprintf(`{"apiKey": "%s", "content": "%s"}`, apiKey, msg)
+	if num != 0 {
+		requestBody = fmt.Sprintf(`{"apiKey": "%s", "content":"[redpacket]{\"type\":\"%s\",\"money\":\"%v\",\"count\":\"1\",\"msg\":\"%s\",\"recivers\":[%s]}[/redpacket]"`, apiKey, typee, num, msg, name)
+	}
 	request, err := http.NewRequest("POST", "https://fishpi.cn/chat-room/send",
 		bytes.NewReader([]byte(requestBody)))
 	request.Header.Set("User-Agent", header)
