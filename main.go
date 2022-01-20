@@ -88,9 +88,9 @@ var ( // 程序参数设置
 >   -redrobot 开启红包机器人	//自动抢红包
 >   -redinfo 查看红包信息
 >   -timingtalk 定时说话	//-timingtalk:5 设置随机1-5分钟就自动发送直到活跃度是百分百就停止
->   -timingtalkm 查看定时说话列表 //-timingtalk:哈哈哈 添加"哈哈哈"进入定时说话列表
+>   -timingtalkm 查看定时说话列表
 >   -sendred  发送红包	//-sendred-32-specify-1-bulabula 发送1个专属红包给bulabula，其他格式-sendred-32-random-10-
-	>> type:random、heartbeat、specify、average
+     >> type:random、heartbeat、specify、average
 >   -nowactive	获取当前活跃度
 >   -connectmsg	查看当前用户消息历史记录
 
