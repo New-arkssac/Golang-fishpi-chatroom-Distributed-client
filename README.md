@@ -2,16 +2,18 @@
 
 **Gayhub地址:**
 
-[https://github.com/New-arkssac/Golang-fishpi-chatroom-Distributed-client]()
+[摸鱼派Golang分布式客户端](https://github.com/New-arkssac/Golang-fishpi-chatroom-Distributed-client)
 >golang第三方库
 >
->[https://github.com/gorilla/websocket
+>https://github.com/gorilla/websocket
 
 ---
 ## 更新日志
 >2022/1/14 &nbsp;&nbsp;&nbsp;&nbsp; 更新了红包机器人 可以自动抢红包，提高抢心跳红包成功的概率
 > 
 >2022/1/16  &nbsp;&nbsp;&nbsp;&nbsp; 更新了定时发消息的功能
+> 
+>2022/1/20 &nbsp;&nbsp;&nbsp;&nbsp; 更新了发送红包，当前活跃度，查看历史发送消息记录，查看定时说话列表功能
 
 
 
@@ -20,6 +22,10 @@
 * 接发消息
 * 红包机器人
 * 定时发消息
+* 发送红包
+* 查看历史消息
+* 查看活跃度
+* 查看定时说话列表
 
 > 因为上班摸鱼学的golang，边学边写的，所以暂时仅支持这些功能😋 )
 
@@ -74,35 +80,40 @@
 **python的tcp客户端**
 
 ```python
-#!/bin/python3                                          
-# -*- coding:utf-8 -*-                                  
-import socket                                           
-from _thread import start_new_thread                    
-import sys                                              
-                                                        
-address = sys.argv[1]                                   
-port = int(sys.argv[2])                                 
-                                                        
-def link():                                             
+#!/bin/python3
+# -*- coding:utf-8 -*-
+import socket
+import threading
+import sys
+
+address = sys.argv[1]  # 服务端地址
+port = int(sys.argv[2])  # 端口
+
+
+def link():
     sc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sc.connect((address, port))                         
-    start_new_thread(send, (sc,))                       
-    while True:                                         
-        try:                                            
-           a = sc.recv(1024)                            
-           print(a.decode("utf-8"))                     
-        except KeyboardInterrupt: # ctrl c退出          
-            sc.close()                                  
-            return                                      
-                                                        
-def send(sc):                                           
-    while True:                                         
-        msg = input("")                                 
-        if msg == "{quit}":                             
-            sys.exit(0)                                 
-        sc.sendall(msg.encode())                        
-                                                        
-link()                                                  
+    sc.connect((address, port))
+    threading.Thread(target=send, args=(sc, )).start()
+    while True:
+        try:
+            a = sc.recv(1024)
+            print(a.decode("utf-8"))
+        except Exception:  # ctrl c退出
+            sc.close()
+            return
+
+
+def send(sc):
+    while True:
+        msg = input("")
+        if msg == "{quit}":
+            break
+        sc.sendall(msg.encode())
+
+
+c = threading.Thread(target=link())
+c.setDaemon(True)
+c.start()
 ```
 
 ![image.png](https://pwl.stackoverflow.wiki/2022/01/image-1e7fe38f.png)
@@ -120,6 +131,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"time"
 )
 
 var ip string
@@ -140,29 +152,33 @@ func input(conn net.Conn) {
 			return
 		}
 		recv := strings.Split(string(buf[:m]), "\n")[0]
-		conn.Write([]byte(recv))
+		if num, writeErr := conn.Write([]byte(recv)); writeErr != nil {
+			log.Printf("写入失败%d次,err:%s", num, writeErr)
+		}
 	}
 }
 
 func main() {
 	flag.Parse()
 	host := fmt.Sprintf("%s:%s", ip, port)
-	conn, err := net.Dial("tcp", host)
+	conn, err := net.DialTimeout("tcp", host, 10*time.Second)
 	if err != nil {
 		log.Panicln("connect fail", err)
 		return
 	}
-	defer conn.Close()
 	go input(conn)
 	for {
 		var buf [1024]byte
 		read := bufio.NewReader(conn)
 		n, err := read.Read(buf[:])
-		if err != nil {
+		if err != nil && n == 0 {
 			fmt.Println("recv failed, err:", err)
+			if closeErr := conn.Close(); closeErr != nil {
+				log.Println("关闭失败:", closeErr)
+			}
 			return
 		}
-		fmt.Println(string(buf[:n]))
+		fmt.Println(string(buf[:]))
 	}
 }
 ```
@@ -171,9 +187,4 @@ func main() {
 
 **甚至是netcat**
 
-![image.png](https://pwl.stackoverflow.wiki/2022/01/image-72f882bb.png)A
-
-
-**服务端**
-
-![image.png](https://pwl.stackoverflow.wiki/2022/01/image-cf2245c0.png)
+![image.png](https://pwl.stackoverflow.wiki/2022/01/image-72f882bb.png)

@@ -401,16 +401,16 @@ func redHeartBeat(heart *heartBeat, m *info, nowTime int, oId string, conn net.C
 			return
 		}
 	}
-	if rush > 0.5 || time.Now().Second()-nowTime > 2 || heart.Count-heart.Got == 1 { // 递归两秒后退出
+	if rush > 0.5 || time.Now().Second()-nowTime > 3 || heart.Count-heart.Got == 1 { // 递归两秒后退出
 		sendForClient("\n红包机器人: 时间到了!!我忍不住了!!我冲了!!\n", conn)
 		go redRandomOrAverageOrMe(m, oId, conn)
 		return
 	} else {
-		message := fmt.Sprintf("\n红包机器人: 稳住!!别急!!再等等!!成功率已经有%f%%了\n", rush*float64(heart.Count))
+		message := fmt.Sprintf("\n红包机器人: 稳住!!别急!!再等等!!成功率已经有%.2f%%了\n", rush*float64(heart.Count))
 		sendForClient(message, conn)
 		moreContent(nowTime, m, oId, conn)
-		return
 	}
+	return
 }
 
 func redRandomOrAverageOrMe(b *info, oId string, conn net.Conn) {
