@@ -233,7 +233,6 @@ func commandDealWicth(m *info, ch chan bool, command string, conn net.Conn) (str
 	//yestday
 	if command == "-yestday" && !m.YestDayAward {
 		sum := getYesterDayAward(m)
-		fmt.Println(sum)
 		if sum < 0 {
 			commandMap[command] = "\n暂时没有昨日奖励，明天再试试吧~\n"
 		} else {
