@@ -93,7 +93,7 @@ var ( // 程序参数设置
      >> type:random、heartbeat、specify、average
 >   -nowactive	获取当前活跃度
 >   -connectmsg	查看当前用户消息历史记录
->   =yestday   获取昨日奖励.
+>   =yestday   获取昨日奖励
 
 `
 )
