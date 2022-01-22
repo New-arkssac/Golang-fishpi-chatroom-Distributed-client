@@ -186,7 +186,7 @@ func commandDealWicth(m *info, ch chan bool, command string, conn net.Conn) (str
 	if command == "-nowactive" && !m.TimingTalk.TimingStatus {
 		num := getActivity(m, conn)
 		commandMap["-nowactive"] = fmt.Sprintf("\n当前%s用户的活跃度是%.2f\n", m.ConnectName, num)
-	} else {
+	} else if command == "-nowactive" && !m.TimingTalk.ActivityStatus {
 		commandMap["-nowactive"] = fmt.Sprintf("\n当前%s用户的活跃度已满\n", m.ConnectName)
 	}
 
