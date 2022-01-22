@@ -233,6 +233,7 @@ func commandDealWicth(m *info, ch chan bool, command string, conn net.Conn) (str
 	//yestday
 	if command == "-yestday" && !m.YestDayAward {
 		sum := getYesterDayAward(m)
+		fmt.Println(sum)
 		if sum < 0 {
 			commandMap[command] = "\n暂时没有昨日奖励，明天再试试吧~\n"
 		} else {
@@ -345,7 +346,9 @@ func getYesterDayAward(m *info) int {
 	if jsonErr := json.Unmarshal(response, &b); jsonErr != nil {
 		log.Println("昨日奖励json err:", jsonErr)
 	}
-	m.YestDayAward = true
+	if b.Sum > 0 {
+		m.YestDayAward = true
+	}
 	return b.Sum
 }
 
