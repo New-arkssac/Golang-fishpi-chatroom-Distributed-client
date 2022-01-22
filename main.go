@@ -91,7 +91,7 @@ var ( // 程序参数设置
 >   -timingtalkm 查看定时说话列表
 >   -sendred  发送红包	//-sendred-32-specify-1-bulabula 发送1个专属红包给bulabula，其他格式-sendred-32-random-10-
      >> type:random、heartbeat、specify、average
->   -nowactive	获取当前活跃度
+>   -nowactive	获取当前活跃度	   //请延时1分钟请求
 >   -connectmsg	查看当前用户消息历史记录
 >   -yestday   获取昨日奖励
 
@@ -369,6 +369,7 @@ func getActivity(m *info, conn net.Conn) float64 {
 	}()
 	var b activity
 	response, _ := ioutil.ReadAll(r.Body)
+	fmt.Println(string(response))
 	if err3 := json.Unmarshal(response, &b); err3 != nil {
 		log.Println("活跃度json转码失败:", err3)
 	}
