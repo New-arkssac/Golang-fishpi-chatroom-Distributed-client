@@ -22,10 +22,10 @@ import (
 )
 
 type info struct { //登录用户信息结构体
-	ApiKey, ConnectName          string
-	ConnectMsg                   []string
-	RedRobotStatus, YestDayAward bool
-	TimingTalk                   struct {
+	ApiKey, ConnectName string
+	ConnectMsg          []string
+	RedRobotStatus      bool
+	TimingTalk          struct {
 		TimingStatus, ActivityStatus bool
 		TalkMessage                  []string
 		TalkMinit                    int
@@ -87,13 +87,12 @@ var ( // 程序参数设置
 >   -help 查看帮助信息
 >   -redrobot 开启红包机器人	//自动抢红包
 >   -redinfo 查看红包信息
->   -timingtalk 定时说话	//-timingtalk:5 设置随机3-5分钟就自动发送直到活跃度是百分百就停止
+>   -timingtalk 定时说话	//-timingtalk:5 设置随机1-5分钟就自动发送直到活跃度是百分百就停止
 >   -timingtalkm 查看定时说话列表
 >   -sendred  发送红包	//-sendred-32-specify-1-bulabula 发送1个专属红包给bulabula，其他格式-sendred-32-random-10-
      >> type:random、heartbeat、specify、average
 >   -nowactive	获取当前活跃度
 >   -connectmsg	查看当前用户消息历史记录
->   =yestday   获取昨日奖励
 
 `
 )
@@ -114,11 +113,9 @@ func process(id string, conn net.Conn) {
 			if m.TimingTalk.TimingStatus && i {
 				rand.Seed(time.Now().Unix())
 				num := rand.Intn(m.TimingTalk.TalkMinit)
-				if num < 3 {
-					num += 3
-				}
 				time.Sleep(time.Duration(num+1) * time.Minute)
 				if getStatus := getActivity(&m, conn); getStatus != 100 {
+					rand.Seed(time.Now().Unix())
 					num = rand.Intn(len(m.TimingTalk.TalkMessage))
 					sendClientMessage(m.TimingTalk.TalkMessage[num], m.ApiKey, "", "", 0, 0) // 发送用户输入的消息
 					ch <- true
@@ -183,11 +180,9 @@ func commandDealWicth(m *info, ch chan bool, command string, conn net.Conn) (str
 		m.RedStatus.GetPoint+m.RedStatus.OutPoint)
 	commandMap["-connectmsg"] = fmt.Sprintf("\n%s %v\n", m.ConnectName, m.ConnectMsg)
 	// noactive
-	if command == "-nowactive" && !m.TimingTalk.TimingStatus {
+	if command == "-nowactive" {
 		num := getActivity(m, conn)
-		commandMap["-nowactive"] = fmt.Sprintf("\n当前%s用户的活跃度是%.2f\n", m.ConnectName, num)
-	} else {
-		commandMap["-nowactive"] = fmt.Sprintf("\n当前%s用户的活跃度已满\n", m.ConnectName)
+		commandMap["-nowactive"] = fmt.Sprintf("\n当前%s用户的活跃度是%f\n", m.ConnectName, num)
 	}
 
 	// timingtalkm
@@ -230,18 +225,6 @@ func commandDealWicth(m *info, ch chan bool, command string, conn net.Conn) (str
 			ch <- true
 		}
 	}
-	//yestday
-	if command == "-yestday" && !m.YestDayAward {
-		sum := getYesterDayAward(m)
-		if sum < 0 {
-			commandMap[command] = "\n暂时没有昨日奖励，明天再试试吧~\n"
-		} else {
-			msg := fmt.Sprintf("\n昨日奖励%d积分\n", sum)
-			commandMap[command] = msg
-		}
-	} else {
-		commandMap[command] = "\n暂时没有昨日奖励，明天再试试吧~\n"
-	}
 
 	// sendred
 	if resul, _ := regexp.MatchString(`^-sendred-\d+-(random|heartbeat|specify|average)-`, command); resul {
@@ -253,7 +236,7 @@ func commandDealWicth(m *info, ch chan bool, command string, conn net.Conn) (str
 		if i < 32 {
 			commandMap[command] = "\n不允许发送小于32积分的红包\n\n"
 		} else {
-			commandMap[command] = fmt.Sprintf("\n红包机器人: 开始发送%s红包\n", out1)
+			commandMap[command] = fmt.Sprintf("\n开始发送%s红包\n", out1)
 			typeMap := map[string]string{
 				"random":    "摸鱼着，事竟成！",
 				"heartbeat": "玩的就是心跳！",
@@ -322,33 +305,6 @@ func distribution(b *info, red *redInfo, m *chatRoom, conn net.Conn) {
 	}
 }
 
-func getYesterDayAward(m *info) int {
-	type getStatus struct {
-		Sum int `json:"sum"`
-	}
-	requestBody := fmt.Sprintf("https://fishpi.cn/activity/yesterday-liveness-reward-api?apiKey=%s", m.ApiKey)
-	request, err := http.NewRequest("GET", requestBody,
-		nil)
-	request.Header.Set("User-Agent", header)
-	if err != nil {
-		log.Println("getYesterDayAward err:", err)
-	}
-	r, err1 := client.Do(request)
-	if err1 != nil {
-		log.Println("Send YesterDay err:", err1)
-	}
-	response, err2 := ioutil.ReadAll(r.Body)
-	var b getStatus
-	if err2 != nil {
-		log.Println("Yester Body err:", err2)
-	}
-	if jsonErr := json.Unmarshal(response, &b); jsonErr != nil {
-		log.Println("昨日奖励json err:", jsonErr)
-	}
-	m.YestDayAward = true
-	return b.Sum
-}
-
 func getActivity(m *info, conn net.Conn) float64 {
 	type activity struct {
 		Liveness float64 `json:"liveness"`
@@ -371,7 +327,7 @@ func getActivity(m *info, conn net.Conn) float64 {
 		log.Println("活跃度json转码失败:", err3)
 	}
 	if b.Liveness == 100.00 {
-		message := fmt.Sprintf("\n当前%s用户的活跃度是%.2f\n", m.ConnectName, b.Liveness)
+		message := fmt.Sprintf("\n%s活跃度已满%.2f%%!\n", m.ConnectName, b.Liveness)
 		sendForClient(message, conn)
 		m.TimingTalk.TimingStatus = false
 		m.TimingTalk.ActivityStatus = true
