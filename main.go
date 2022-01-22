@@ -114,9 +114,6 @@ func process(id string, conn net.Conn) {
 			if m.TimingTalk.TimingStatus && i {
 				rand.Seed(time.Now().Unix())
 				num := rand.Intn(m.TimingTalk.TalkMinit)
-				if num < 3 {
-					num += 3
-				}
 				time.Sleep(time.Duration(num+1) * time.Minute)
 				if getStatus := getActivity(&m, conn); getStatus != 100 {
 					num = rand.Intn(len(m.TimingTalk.TalkMessage))
@@ -370,9 +367,7 @@ func getActivity(m *info, conn net.Conn) float64 {
 	var b activity
 	response, _ := ioutil.ReadAll(r.Body)
 	fmt.Println(string(response))
-	if err3 := json.Unmarshal(response, &b); err3 != nil {
-		log.Println("活跃度json转码失败:", err3)
-	}
+	_ = json.Unmarshal(response, &b)
 	if b.Liveness == 100.00 {
 		message := fmt.Sprintf("\n当前%s用户的活跃度是%.2f\n", m.ConnectName, b.Liveness)
 		sendForClient(message, conn)
