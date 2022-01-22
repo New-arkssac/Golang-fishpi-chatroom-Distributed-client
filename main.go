@@ -239,7 +239,7 @@ func commandDealWicth(m *info, ch chan bool, command string, conn net.Conn) (str
 			msg := fmt.Sprintf("\n昨日奖励%d积分\n", sum)
 			commandMap[command] = msg
 		}
-	} else {
+	} else if command == "-yestday" && m.YestDayAward {
 		commandMap[command] = "\n暂时没有昨日奖励，明天再试试吧~\n"
 	}
 
