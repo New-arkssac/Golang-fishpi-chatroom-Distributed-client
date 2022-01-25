@@ -22,10 +22,10 @@ import (
 )
 
 type info struct { //登录用户信息结构体
-	ApiKey, ConnectName          string
-	ConnectMsg                   []string
-	RedRobotStatus, YestDayAward bool
-	TimingTalk                   struct {
+	ApiKey, ConnectName                           string
+	ConnectMsg                                    []string
+	RedRobotStatus, YestDayAward, WebsokcetStatus bool
+	TimingTalk                                    struct {
 		TimingStatus, ActivityStatus bool
 		TalkMessage                  []string
 		TalkMinit                    int
@@ -108,7 +108,6 @@ func process(id string, conn net.Conn) {
 	log.Println(conn.RemoteAddr().String() + " Connect SUCCESS")
 	var m = status[id]
 	var ch = make(chan bool, 1)
-	var ch1 = make(chan bool, 1)
 	go func() {
 		for i := range ch {
 			if m.TimingTalk.ActivityStatus {
@@ -128,8 +127,8 @@ func process(id string, conn net.Conn) {
 	}()
 	go sendForClient(login, conn)
 	// 定时发送消息函数
-	go webSocketClient(ch1, &m, conn) // 开启websocket会话
-	for {                             // 接收tcp连接会话的输入
+	go webSocketClient(&m, conn) // 开启websocket会话
+	for {                        // 接收tcp连接会话的输入
 		var buf [1024]byte
 		read := bufio.NewReader(conn)
 		n, err := read.Read(buf[:])
@@ -137,8 +136,7 @@ func process(id string, conn net.Conn) {
 			goto flag
 		}
 		recv := strings.TrimSpace(string(buf[:n])) // 删除接收到的换行符
-		fmt.Println(m)
-		if recv == "-quit" || <-ch1 {
+		if recv == "-quit" || m.WebsokcetStatus {
 			goto flag
 		}
 		if strings.HasPrefix(recv, "-") && len(m.ApiKey) == 32 && m.ConnectName != "" { // 检查是否是命令格式
@@ -275,7 +273,7 @@ func commandDealWicth(m *info, ch chan bool, command string, conn net.Conn) (str
 	return command, true
 }
 
-func webSocketClient(ch chan bool, b *info, connect net.Conn) {
+func webSocketClient(b *info, connect net.Conn) {
 	client := websocket.Dialer{}
 	conn, _, err := client.Dial("wss://fishpi.cn/chat-room-channel", nil) // 连接摸鱼派聊天室
 	if err != nil {
@@ -285,7 +283,7 @@ func webSocketClient(ch chan bool, b *info, connect net.Conn) {
 
 	defer func() {
 		handleError("webSocketClient conn关闭失败", conn.Close()) // 会话结束关闭连接
-		ch <- false
+		b.WebsokcetStatus = true
 	}()
 
 	for {
