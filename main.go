@@ -105,6 +105,7 @@ func init() {
 }
 
 func process(id string, conn net.Conn) {
+	log.Println(conn.RemoteAddr().String() + " Connect SUCCESS")
 	var m = status[id]
 	var ch = make(chan bool, 1)
 	var ch1 = make(chan bool, 1)
@@ -564,7 +565,6 @@ func main() { // 主函数
 	for {
 		connent, err := listen.Accept() //等待tcp连接
 		id := md5Hash(time.Now().String())
-		log.Println(connent.RemoteAddr().String() + " Connect SUCCESS")
 		if err != nil {
 			log.Println("Accept error:", err)
 			continue
