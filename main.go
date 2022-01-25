@@ -137,6 +137,7 @@ func process(id string, conn net.Conn) {
 			goto flag
 		}
 		recv := strings.TrimSpace(string(buf[:n])) // 删除接收到的换行符
+		fmt.Println(m)
 		if recv == "-quit" || <-ch1 {
 			goto flag
 		}
@@ -157,7 +158,7 @@ func process(id string, conn net.Conn) {
 			continue
 		}
 
-		if m.ApiKey == "" { // 检查是否拥有apiKey
+		if len(m.ApiKey) == 32 { // 检查是否拥有apiKey
 			sendForClient(login, conn)
 			continue
 		}
