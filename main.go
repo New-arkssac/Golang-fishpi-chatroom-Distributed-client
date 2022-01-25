@@ -94,7 +94,7 @@ var ( // 程序参数设置
 >   -nowactive	获取当前活跃度	   //请延时1分钟请求
 >   -connectmsg	查看当前用户消息历史记录
 >   -yestday   获取昨日奖励
->	-quite	用户退出，删除用户缓存
+>   -quite	用户退出，删除用户缓存
 
 `
 )
@@ -167,7 +167,7 @@ func process(id string, conn net.Conn) {
 flag:
 	out := conn.RemoteAddr().String()
 	delete(status, id) // tcp连接断开时删除对应的缓存
-	log.Println(out, " Login out")
+	log.Println(out, "Login out")
 	handleError(out, conn.Close())
 	return
 }
