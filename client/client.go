@@ -26,6 +26,7 @@ func input(conn net.Conn) {
 		m, err := read.Read(buf[:])
 		if err != nil {
 			log.Println("Login out")
+			_ = conn.Close()
 			return
 		}
 		recv := strings.Split(string(buf[:m]), "\n")[0]
