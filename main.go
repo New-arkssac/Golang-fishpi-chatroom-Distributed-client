@@ -155,7 +155,7 @@ func process(id string, conn net.Conn) {
 			continue
 		}
 
-		if len(m.ApiKey) == 32 { // 检查是否拥有apiKey
+		if len(m.ApiKey) != 32 { // 检查是否拥有apiKey
 			sendForClient(login, conn)
 			continue
 		}
