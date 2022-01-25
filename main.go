@@ -94,6 +94,7 @@ var ( // 程序参数设置
 >   -nowactive	获取当前活跃度	   //请延时1分钟请求
 >   -connectmsg	查看当前用户消息历史记录
 >   -yestday   获取昨日奖励
+>	-quite	用户退出，删除用户缓存
 
 `
 )
@@ -106,6 +107,7 @@ func init() {
 func process(id string, conn net.Conn) {
 	var m = status[id]
 	var ch = make(chan bool, 1)
+	var ch1 = make(chan bool, 1)
 	go func() {
 		for i := range ch {
 			if m.TimingTalk.ActivityStatus {
@@ -125,21 +127,18 @@ func process(id string, conn net.Conn) {
 	}()
 	go sendForClient(login, conn)
 	// 定时发送消息函数
-	go webSocketClient(&m, conn) // 开启websocket会话
-	for {                        // 接收tcp连接会话的输入
+	go webSocketClient(ch1, &m, conn) // 开启websocket会话
+	for {                             // 接收tcp连接会话的输入
 		var buf [1024]byte
 		read := bufio.NewReader(conn)
 		n, err := read.Read(buf[:])
 		if err != nil {
-			out := conn.RemoteAddr().String()
-			delete(status, id) // tcp连接断开时删除对应的缓存
-			log.Println(out, " Login out")
-			if closeErr := conn.Close(); closeErr != nil {
-				log.Println(closeErr)
-			}
-			return
+			goto flag
 		}
-		recv := strings.TrimSpace(string(buf[:n]))                                      // 删除接收到的换行符
+		recv := strings.TrimSpace(string(buf[:n])) // 删除接收到的换行符
+		if recv == "-quit" || <-ch1 {
+			goto flag
+		}
 		if strings.HasPrefix(recv, "-") && len(m.ApiKey) == 32 && m.ConnectName != "" { // 检查是否是命令格式
 			commandName, result := commandDealWicth(&m, ch, recv, conn)
 			if !result { // 检查命令
@@ -166,6 +165,12 @@ func process(id string, conn net.Conn) {
 		m.ConnectMsg = append(m.ConnectMsg, r)
 		sendClientMessage(recv, m.ApiKey, "", "", 0, 0) // 发送用户输入的消息
 	}
+flag:
+	out := conn.RemoteAddr().String()
+	delete(status, id) // tcp连接断开时删除对应的缓存
+	log.Println(out, " Login out")
+	handleError(out, conn.Close())
+	return
 }
 
 func commandDealWicth(m *info, ch chan bool, command string, conn net.Conn) (string, bool) { // 分发命令函数
@@ -193,9 +198,8 @@ func commandDealWicth(m *info, ch chan bool, command string, conn net.Conn) (str
 		m.TimingTalk.TalkMessage = append(m.TimingTalk.TalkMessage, "小冰 lsp排行榜")
 		m.TimingTalk.TalkMessage = append(m.TimingTalk.TalkMessage, "小冰 你人呢？")
 		m.TimingTalk.TalkMessage = append(m.TimingTalk.TalkMessage, "小冰 去打劫")
-		m.TimingTalk.TalkMessage = append(m.TimingTalk.TalkMessage, "摸鱼办第一纪律委提醒您：\n聊天千万条，友善第一条;"+
-			"\n灌水不规范，扣分两行泪。\n我正在认真巡逻中，不要被我逮到哦～![doge](https://cdn.jsdelivr.net/npm/vditor/dist/images/"+
-			"emoji/doge.png)\n详细社区守则请看：[摸鱼守则](https://fishpi.cn/article/1631779202219)")
+		m.TimingTalk.TalkMessage = append(m.TimingTalk.TalkMessage, "小冰 来个色图")
+		m.TimingTalk.TalkMessage = append(m.TimingTalk.TalkMessage, "小冰 今天天气")
 	}
 	commandMap["-timingtalkm"] = fmt.Sprintln(m.TimingTalk.TalkMessage)
 
@@ -269,7 +273,7 @@ func commandDealWicth(m *info, ch chan bool, command string, conn net.Conn) (str
 	return command, true
 }
 
-func webSocketClient(b *info, connect net.Conn) {
+func webSocketClient(ch chan bool, b *info, connect net.Conn) {
 	client := websocket.Dialer{}
 	conn, _, err := client.Dial("wss://fishpi.cn/chat-room-channel", nil) // 连接摸鱼派聊天室
 	if err != nil {
@@ -278,28 +282,21 @@ func webSocketClient(b *info, connect net.Conn) {
 	}
 
 	defer func() {
-		if closeErr := conn.Close(); closeErr != nil {
-			log.Println(closeErr)
-		}
-	}() // 会话结束关闭连接
+		handleError("webSocketClient conn关闭失败", conn.Close()) // 会话结束关闭连接
+		ch <- false
+	}()
 
 	for {
-		_, messageData, err := conn.ReadMessage() // 获取信息
-		if err != nil {
-			log.Println("web linke err:", err)
+		_, messageData, err1 := conn.ReadMessage() // 获取信息
+		if err1 != nil {
+			log.Println("web linke err:", err1)
 			continue
 		}
 		var red redInfo
 		var m chatRoom
-		err1 := json.Unmarshal(messageData, &m)
-		if err1 != nil { // 反序列化聊天室数据
-			log.Println("Message get error1", err1)
-		}
+		handleError("聊天室json转码失败", json.Unmarshal(messageData, &m))
 		if m.Content != "" && !strings.Contains(m.Content, "<") { // 检查红包数据
-			err2 := json.Unmarshal([]byte(m.Content), &red)
-			if err2 != nil {
-				log.Println("red Message get error2", err2)
-			}
+			handleError("红包json转码失败", json.Unmarshal([]byte(m.Content), &red))
 		}
 		go distribution(b, &red, &m, connect) // 分发数据
 	}
@@ -327,21 +324,13 @@ func getYesterDayAward(m *info) int {
 	request, err := http.NewRequest("GET", requestBody,
 		nil)
 	request.Header.Set("User-Agent", header)
-	if err != nil {
-		log.Println("getYesterDayAward err:", err)
-	}
+	handleError("设置getYesterDayAward请求头失败", err)
 	r, err1 := client.Do(request)
-	if err1 != nil {
-		log.Println("Send YesterDay err:", err1)
-	}
+	handleError("发送YesterDay请求头失败", err1)
 	response, err2 := ioutil.ReadAll(r.Body)
 	var b getStatus
-	if err2 != nil {
-		log.Println("Yester Body err:", err2)
-	}
-	if jsonErr := json.Unmarshal(response, &b); jsonErr != nil {
-		log.Println("昨日奖励json err:", jsonErr)
-	}
+	handleError("Yester Body err:", err2)
+	handleError("昨日奖励json err:", json.Unmarshal(response, &b))
 	if b.Sum > 0 {
 		m.YestDayAward = true
 	}
@@ -355,15 +344,9 @@ func getActivity(m *info, conn net.Conn) float64 {
 	url := fmt.Sprintf("https://fishpi.cn/user/liveness?apiKey=%s", m.ApiKey)
 	request, err := http.NewRequest("GET", url, nil)
 	request.Header.Set("User-Agent", header)
-	if err != nil {
-		log.Println("设置活跃度失败请求:", err)
-	}
+	handleError("设置活跃度失败请求:", err)
 	r, err1 := client.Do(request)
-	defer func() {
-		if err1 != nil {
-			log.Println("活跃度获取失败:", err1)
-		}
-	}()
+	defer handleError("活跃度获取失败:", err1)
 	var b activity
 	response, _ := ioutil.ReadAll(r.Body)
 	fmt.Println(string(response))
@@ -404,25 +387,18 @@ func moreContent(nowTime int, m *info, oId string, conn net.Conn) { // 获取领
 	var more chatMore
 	var heart heartBeat
 	request, err := http.NewRequest("GET", "https://fishpi.cn/chat-room/more?page=1", nil)
-	if err != nil {
-		fmt.Println(err)
-	}
+	request.Header.Set("User-Agent", header)
+	handleError("设置moreContent请求头失败", err)
 	request.Header.Set("User-Agent", header)
 	response, err1 := client.Do(request)
-	if err1 != nil {
-		log.Println(err1)
-	}
+	handleError("发送moreContent请求头失败", err1)
 	r, _ := ioutil.ReadAll(response.Body)
-	if err2 := json.Unmarshal(r, &more); err2 != nil {
-		log.Println(err2)
-	}
+	handleError("历史信息json转码失败", json.Unmarshal(r, &more))
 	if strings.Contains(more.Data[0].Content, "<") {
 		moreContent(nowTime, m, oId, conn)
 		return
 	}
-	if err3 := json.Unmarshal([]byte(more.Data[0].Content), &heart); err3 != nil {
-		log.Println(err3)
-	}
+	handleError("历史信息json转码失败", json.Unmarshal([]byte(more.Data[0].Content), &heart))
 	redHeartBeat(&heart, m, nowTime, oId, conn)
 }
 
@@ -451,8 +427,8 @@ func redHeartBeat(heart *heartBeat, m *info, nowTime int, oId string, conn net.C
 		message := fmt.Sprintf("\n红包机器人: 稳住!!别急!!再等等!!成功率已经有%.2f%%了\n", rush*float64(heart.Count))
 		sendForClient(message, conn)
 		moreContent(nowTime, m, oId, conn)
+		return
 	}
-	return
 }
 
 func redRandomOrAverageOrMe(b *info, oId string, conn net.Conn) {
@@ -462,23 +438,12 @@ func redRandomOrAverageOrMe(b *info, oId string, conn net.Conn) {
 		bytes.NewReader([]byte(requestBody))) // 开启红包
 	request.Header.Set("User-Agent", header)
 	request.Header.Set("Content-Type", "application/json")
-	if err != nil {
-		log.Print("Get redPacket fail:", err)
-	}
+	handleError("设置redRandomOrAverageOrMe请求头失败", err)
 	r, err1 := client.Do(request)
-	if err1 != nil {
-		log.Println(err1)
-	}
-	defer func() {
-		if closeErr := r.Body.Close(); closeErr != nil {
-			log.Println(closeErr)
-		}
-	}()
+	handleError("发送redRandomOrAverageOrMe请求头失败", err1)
 	response, _ := ioutil.ReadAll(r.Body)
 	var m redOpenContent
-	if err := json.Unmarshal(response, &m); err != nil {
-		log.Println("redPacket err:", err)
-	}
+	handleError("红包json转码失败", json.Unmarshal(response, &m))
 	for i := 0; i < len(m.Who); i++ { //检查是否打开红包
 		if m.Who[i].UserName == b.ConnectName {
 			if m.Who[i].GetMoney == 0 {
@@ -498,6 +463,7 @@ func redRandomOrAverageOrMe(b *info, oId string, conn net.Conn) {
 			return
 		}
 	}
+	handleError("redRandomOrAverageOrMe响应体关闭失败", r.Body.Close())
 	sendForClient("\n红包机器人: 呀哟，没抢到!!一定是网络的问题!!!\n", conn)
 	b.RedStatus.MissRed++
 
@@ -510,23 +476,12 @@ func getApiKey(userName string, passwd string, conn net.Conn) (string, string) {
 		bytes.NewReader([]byte(requestBody)))
 	request.Header.Set("User-Agent", header)
 	request.Header.Set("Content-Type", "application/json")
-	if err != nil {
-		log.Println("Get apiKey fail:", err)
-	}
+	handleError("设置getApiKey请求体失败", err)
 	response, err1 := client.Do(request)
-	if err1 != nil {
-		log.Println("Get apiKey fail1:", err1)
-	}
-	defer func() {
-		if closeErr := response.Body.Close(); closeErr != nil {
-			log.Println(closeErr)
-		}
-	}()
+	handleError("发送getApiKey请求体失败", err1)
 	apiKey, _ := ioutil.ReadAll(response.Body)
 	m := make(map[string]interface{})
-	if err1 := json.Unmarshal(apiKey, &m); err1 != nil {
-		log.Println(err1)
-	}
+	handleError("getApiKeyJson转码失败", json.Unmarshal(apiKey, &m))
 	if m["code"].(float64) == -1 { // 判断是否获取成功
 		msg := fmt.Sprintf("Login Message:%s\n", m["msg"].(string))
 		sendForClient(msg, conn)
@@ -536,6 +491,7 @@ func getApiKey(userName string, passwd string, conn net.Conn) (string, string) {
 	msg := fmt.Sprintf("Login Message:%s(%s)\n%s\n", connectUserName, m["Key"].(string), "输入-help查看命令信息\n")
 	log.Printf("%s %s Loging SUCCESS", conn.RemoteAddr().String(), connectUserName)
 	sendForClient(msg, conn)
+	handleError("关闭getApiKey响应体失败", response.Body.Close())
 	return m["Key"].(string), connectUserName
 }
 
@@ -552,27 +508,13 @@ func getUserInfo(apiKey string) string { // 获取用户信息
 	requestBody := fmt.Sprintf("https://fishpi.cn/api/user?apiKey=%s", apiKey)
 	request, err := http.NewRequest("GET", requestBody, nil)
 	request.Header.Set("User-Agent", header)
-
-	if err != nil {
-		log.Println("get connect User Info err:", err)
-	}
-
+	handleError("设置getUserInfo请求头失败", err)
 	response, err1 := client.Do(request)
-
-	if err1 != nil {
-		log.Println(err1)
-	}
-
-	defer func() {
-		if closeErr := response.Body.Close(); closeErr != nil {
-			log.Println(closeErr)
-		}
-	}()
+	handleError("发送getUserInfo请求头失败", err1)
 	connectUserName, _ := ioutil.ReadAll(response.Body)
 	var m dataInfo
-	if err1 := json.Unmarshal(connectUserName, &m); err1 != nil {
-		log.Println(err1)
-	}
+	handleError("转码user信息json失败", json.Unmarshal(connectUserName, &m))
+	handleError("关闭getUserInfo响应体失败", response.Body.Close())
 	return m.Data.UserName
 }
 
@@ -590,24 +532,24 @@ func sendClientMessage(msg, apiKey, typee, name string, count, money int64) { //
 	}
 	requestBody := fmt.Sprintf(`{"apiKey": "%s", "content": "%s"}`, apiKey, msg)
 	if money != 0 {
-		requestBody = fmt.Sprintf(`{"apiKey": "%s", "content":"[redpacket]{\"type\":\"%s\",\"money\":\"%v\",\"count\":\"%v\",\"msg\":\"%s\",\"recivers\":[\"%s\"]}[/redpacket]"}`, apiKey, typee, money, count, msg, name)
+		requestBody = fmt.Sprintf(
+			`{"apiKey": "%s", "content":"[redpacket]{\"type\":\"%s\",\"money\":\"%v\",\"count\":\"%v\",\"msg\":\"%s\",\"recivers\":[\"%s\"]}[/redpacket]"}`,
+			apiKey, typee, money, count, msg, name)
 	}
 	request, err := http.NewRequest("POST", "https://fishpi.cn/chat-room/send",
 		bytes.NewReader([]byte(requestBody)))
 	request.Header.Set("User-Agent", header)
 	request.Header.Set("Content-Type", "application/json")
-	if err != nil {
-		log.Println("Send Message error:", err)
-	}
+	handleError("设置发送客户端请求头失败:", err)
 	response, err1 := client.Do(request)
-	if err1 != nil {
-		log.Println(response)
+	handleError("发送客户端消息失败", err1)
+	handleError("关闭响应体失败", response.Body.Close())
+}
+
+func handleError(errName string, err error) {
+	if err != nil {
+		log.Printf("%s err:%v", errName, err)
 	}
-	defer func() {
-		if closeErr := response.Body.Close(); closeErr != nil {
-			log.Println("发送消息关闭失败", closeErr)
-		}
-	}()
 }
 
 func main() { // 主函数
