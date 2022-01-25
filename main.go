@@ -348,7 +348,6 @@ func getActivity(m *info, conn net.Conn) float64 {
 	defer handleError("活跃度获取失败:", err1)
 	var b activity
 	response, _ := ioutil.ReadAll(r.Body)
-	fmt.Println(string(response))
 	_ = json.Unmarshal(response, &b)
 	if b.Liveness == 100.00 {
 		message := fmt.Sprintf("\n当前%s用户的活跃度是%.2f\n", m.ConnectName, b.Liveness)
