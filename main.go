@@ -105,7 +105,6 @@ func init() {
 }
 
 func process(id string, conn net.Conn) {
-	log.Println(conn.RemoteAddr().String() + " Connect SUCCESS")
 	var m = status[id]
 	var ch = make(chan bool, 1)
 	go func() {
@@ -568,6 +567,7 @@ func main() { // 主函数
 			log.Println("Accept error:", err)
 			continue
 		}
+		log.Println(connent.RemoteAddr().String() + " Connect SUCCESS")
 		go process(id, connent) // 创建tcp会话
 	}
 
